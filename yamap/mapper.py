@@ -1,17 +1,17 @@
-from __future__ import annotations
+import typing
 
+from . import schema
 from dataclasses import dataclass,field
 from ruamel.yaml.loader import SafeLoader
 from ruamel.yaml.nodes import Node
-from . import schema
 
 @dataclass
 class result:
     node: Node
-    type: schema.yatype
-    parent: result
+    type: 'schema.yatype'
+    parent: 'result'
     visited: bool = False
-    children: list[result] = field(default_factory=list)
+    children: typing.List['result'] = field(default_factory=list)
 
 class Mapper:
     def load(self, stream, type):

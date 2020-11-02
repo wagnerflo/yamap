@@ -1,9 +1,11 @@
-from . import schema
+from .schema import *
 
-__all__ = ()
-
-for mod in (schema,):
-    for name in mod.__all__:
-        globals()[name] = getattr(mod, name)
-
-    __all__ = __all__ + mod.__all__
+__all__ = (
+    'yaoneof',
+    'yascalar',
+    'yastr',
+    'yadict',
+    'yasquashedmap',
+    'yaexpand',
+    'yalist',
+)
