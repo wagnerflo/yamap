@@ -12,11 +12,19 @@ class stackitem:
     visited: bool = False
     children: typing.List['stackitem'] = dataclasses.field(default_factory=list)
 
+class Loader(ruamel.yaml.loader.SafeLoader):
+    yaml_constructors: typing.Dict[typing.Any, typing.Any] = {}
+    yaml_multi_constructors: typing.Dict[typing.Any, typing.Any] = {}
+    yaml_representers: typing.Dict[typing.Any, typing.Any] = {}
+    yaml_multi_representers: typing.Dict[typing.Any, typing.Any] = {}
+    yaml_path_resolvers: typing.Dict[typing.Any, typing.Any] = {}
+    yaml_implicit_resolvers: typing.Dict[typing.Any, typing.Any] = {}
+
 def load_and_map(stream, schema):
     if not hasattr(stream, 'read') and hasattr(stream, 'open'):
         stream = stream.open('rb')
 
-    loader = ruamel.yaml.loader.StreamLoader(stream)
+    loader = Loader(stream)
     node = loader.get_single_node()
     stack = [stackitem(node, schema.matches(node), None)]
 
