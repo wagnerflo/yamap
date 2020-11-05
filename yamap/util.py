@@ -1,4 +1,4 @@
-from inspect import isclass
+import inspect
 
 def zip_first(pred, iterable):
     for first in iterable:
@@ -9,7 +9,7 @@ def zip_first(pred, iterable):
     return (None, None)
 
 def mkobj(cls_or_instance):
-    if isclass(cls_or_instance):
+    if inspect.isclass(cls_or_instance):
         return cls_or_instance()
     return cls_or_instance
 

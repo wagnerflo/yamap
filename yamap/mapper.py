@@ -1,24 +1,23 @@
+import dataclasses
+import ruamel.yaml.loader
+import ruamel.yaml.nodes
 import typing
+import yamap.schema
 
-from . import schema
-from dataclasses import dataclass,field
-from ruamel.yaml.loader import SafeLoader
-from ruamel.yaml.nodes import Node
-
-@dataclass
+@dataclasses.dataclass
 class result:
-    node: Node
-    type: 'schema.yatype'
+    node: ruamel.yaml.nodes.Node
+    type: 'yamap.schema.yatype'
     parent: 'result'
     visited: bool = False
-    children: typing.List['result'] = field(default_factory=list)
+    children: typing.List['result'] = dataclasses.field(default_factory=list)
 
 class Mapper:
     def load(self, stream, type):
         if not hasattr(stream, 'read') and hasattr(stream, 'open'):
             stream = stream.open('rb')
 
-        loader = SafeLoader(stream)
+        loader = ruamel.yaml.loader.SafeLoader(stream)
         node = loader.get_single_node()
         stack = [result(node, type.matches(node), None)]
 

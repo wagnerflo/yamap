@@ -1,17 +1,14 @@
+import abc
+import collections
+import copy
+import re
 import typing
 
-from abc import ABC,abstractmethod
-from collections import defaultdict
-from copy import copy
 from dataclasses import (
     dataclass,
     field,
-    fields,
+    fields as get_dataclass_fields,
     InitVar as initvar,
-)
-from re import (
-    compile as re_compile,
-    escape as re_escape,
 )
 
 from .mapper import Mapper
@@ -23,22 +20,22 @@ from .util import (
 )
 
 
-class yatype(ABC):
+class yatype(abc.ABC):
     def copy(self, **kwargs):
-        new = copy(self)
-        for field in fields(new):
+        new = copy.copy(self)
+        for field in get_dataclass_fields(new):
             if field.name not in kwargs:
                 continue
             object.__setattr__(new, field.name, kwargs[field.name])
         return new
 
-class yamatchable(ABC):
-    @abstractmethod
+class yamatchable(abc.ABC):
+    @abc.abstractmethod
     def matches(self, node, throw=True):
         pass
 
-class yaresolvable(ABC):
-    @abstractmethod
+class yaresolvable(abc.ABC):
+    @abc.abstractmethod
     def resolve(self, value):
         pass
 
@@ -47,7 +44,7 @@ class yatreeish_data:
     is_branch: bool = field(default=True, init=False, repr=False)
 
 class yatreeish(yatreeish_data,yaresolvable):
-    @abstractmethod
+    @abc.abstractmethod
     def match_children(self, node):
         pass
 
@@ -112,7 +109,7 @@ class yaleafnode_data:
     is_branch: bool = field(default=False, init=False, repr=False)
 
 class yaleafnode(yaleafnode_data,yanode):
-    @abstractmethod
+    @abc.abstractmethod
     def construct(self, constructor, node):
         pass
 
@@ -153,7 +150,7 @@ class yadict(yamap):
         repeat: bool = False
 
         def __post_init__(self):
-            object.__setattr__(self, 'regex', re_compile(self.regex))
+            object.__setattr__(self, 'regex', re.compile(self.regex))
             object.__setattr__(self, 'type', mkobj(self.type))
 
         def matches(self, key, value):
@@ -166,7 +163,7 @@ class yadict(yamap):
 
     def match_children(self, node):
         result = []
-        counts = defaultdict(lambda: 0)
+        counts = collections.defaultdict(lambda: 0)
 
         for key,value in node.value:
             if key.tag != 'tag:yaml.org,2002:str':
@@ -196,10 +193,10 @@ class yadict(yamap):
         )
 
     def optional(self, key, value):
-        return self.copy(re_escape(key), value)
+        return self.copy(re.escape(key), value)
 
     def required(self, key, value):
-        return self.copy(re_escape(key), value, required=True)
+        return self.copy(re.escape(key), value, required=True)
 
     def zero_or_more(self, regex, value):
         return self.copy(regex, value, repeat=True)
