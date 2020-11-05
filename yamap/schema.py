@@ -17,16 +17,18 @@ from .util import (
     zip_first,
     mkobj,
     pair,
+    unfreeze,
 )
 
 
 class yatype(abc.ABC):
     def copy(self, **kwargs):
         new = copy.copy(self)
-        for field in get_dataclass_fields(new):
-            if field.name not in kwargs:
-                continue
-            object.__setattr__(new, field.name, kwargs[field.name])
+        with unfreeze(new) as unfrozen:
+            for field in get_dataclass_fields(new):
+                if field.name not in kwargs:
+                    continue
+                unfrozen[field.name] = kwargs[field.name]
         return new
 
 class yamatchable(abc.ABC):
@@ -54,7 +56,8 @@ class yaoneof(yatype,yamatchable):
     types: typing.Tuple[yatype, ...] = field(init=False, default=())
 
     def __init__(self, *types):
-        object.__setattr__(self, 'types', tuple(map(mkobj, types)))
+        with unfreeze(self) as unfrozen:
+            unfrozen.types = tuple(map(mkobj, types))
 
     def __iter__(self):
         return iter(self.types)
@@ -150,8 +153,9 @@ class yadict(yamap):
         repeat: bool = False
 
         def __post_init__(self):
-            object.__setattr__(self, 'regex', re.compile(self.regex))
-            object.__setattr__(self, 'type', mkobj(self.type))
+            with unfreeze(self) as unfrozen:
+                unfrozen.regex = re.compile(unfrozen.regex)
+                unfrozen.type = mkobj(unfrozen.type)
 
         def matches(self, key, value):
             if not self.regex.fullmatch(key):
