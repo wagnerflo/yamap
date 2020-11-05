@@ -75,7 +75,7 @@ class yaoneof(yatype,yamatchable):
 class yaexpand(yatype,yatreeish):
     key: str
     value_type: yatype
-    type: typing.Callable[[str, typing.Any], typing.Any] = field(default=pair)
+    type: typing.Callable[[str, typing.Any], typing.Any] = pair
 
     def match_children(self, node):
         return [(node, self.value_type.matches(node))]
@@ -122,22 +122,20 @@ class yabranchnode(yanode,yatreeish):
 
 @dataclass(frozen=True)
 class yascalar(yaleafnode):
-    tags: typing.Tuple[str, ...] = field(default=(
-        'tag:yaml.org,2002:str',
-        'tag:yaml.org,2002:int',
-    ))
+    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:str',
+                                    'tag:yaml.org,2002:int')
 
     def construct(self, constructor, node):
         return constructor.construct_scalar(node)
 
 @dataclass(frozen=True)
 class yastr(yascalar):
-    tags: typing.Tuple[str, ...] = field(default=('tag:yaml.org,2002:str',))
+    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:str',)
 
 
 @dataclass(frozen=True)
 class yamap_data:
-    tags: typing.Tuple[str, ...] = field(default=('tag:yaml.org,2002:map',))
+    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:map',)
 
 class yamap(yamap_data,yabranchnode):
     pass
@@ -162,7 +160,7 @@ class yadict(yamap):
                 return None
             return self.type.matches(value, throw=False)
 
-    type: typing.Callable[[typing.Any], typing.Any] = field(default=dict)
+    type: typing.Callable[[typing.Any], typing.Any] = dict
     types: typing.Tuple[typeitem, ...] = field(init=False, default=())
 
     def match_children(self, node):
@@ -211,7 +209,7 @@ class yadict(yamap):
 
 @dataclass(frozen=True)
 class yasquashedmap(yamap):
-    type: typing.Callable[[str, typing.Any], typing.Any] = field(default=pair)
+    type: typing.Callable[[str, typing.Any], typing.Any] = pair
     value_type: typing.Optional[yatype] = field(init=False, default=None)
 
     def match_children(self, node):
@@ -239,7 +237,7 @@ class yasquashedmap(yamap):
 
 @dataclass(frozen=True)
 class yalist(yabranchnode):
-    tags: typing.Tuple[str, ...] = field(default=('tag:yaml.org,2002:seq',))
+    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:seq',)
     types: yaoneof = field(init=False, default_factory=yaoneof)
 
     def match_children(self, node):
