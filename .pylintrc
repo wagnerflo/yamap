@@ -1,0 +1,8 @@
+[BASIC]
+min-public-methods=0
+
+[DESIGN]
+max-parents=100
+
+[MESSAGES CONTROL]
+disable=invalid-name

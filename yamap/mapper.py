@@ -1,11 +1,32 @@
+# Copyright 2020 Florian Wagner <florian@wagner-flo.net>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+''' Contains the core functionality of this library as well as a bunch
+    of related helper classes. '''
+
 import dataclasses
+import typing
+
 import ruamel.yaml.loader
 import ruamel.yaml.nodes
-import typing
-import yamap.schema
+import yamap.schema                      # pylint: disable=unused-import
 
 @dataclasses.dataclass
 class stackitem:
+    ''' Internal helper class for better readability when working with
+        items on the Mapper stack. '''
+
     node: ruamel.yaml.nodes.Node
     schema: 'yamap.schema.yatype'
     parent: 'stackitem'
@@ -13,6 +34,12 @@ class stackitem:
     children: typing.List['stackitem'] = dataclasses.field(default_factory=list)
 
 class Loader(ruamel.yaml.loader.SafeLoader):
+    # pylint: disable=abstract-method
+
+    ''' Our very ons subclass of the ruamel SafeLoader. We have this to
+        minimize other users of ruame.yaml inadvertently foisting
+        constructors, representers or resolvers on us. '''
+
     yaml_constructors: typing.Dict[typing.Any, typing.Any] = {}
     yaml_multi_constructors: typing.Dict[typing.Any, typing.Any] = {}
     yaml_representers: typing.Dict[typing.Any, typing.Any] = {}
@@ -21,6 +48,21 @@ class Loader(ruamel.yaml.loader.SafeLoader):
     yaml_implicit_resolvers: typing.Dict[typing.Any, typing.Any] = {}
 
 def load_and_map(stream, schema):
+    ''' Iterative stack based implementation of the mapper.
+
+        Visits each none-branch node once and each branch node (that
+        being sequence or mapping) twice: Once before and once after
+        working through all its children.
+
+        The first visit will try to map all children to schema types
+        using the method appropriate to the current type and push all of
+        them on the stack to be evaluated in the iterations directly
+        following.
+
+        The second visit will (or the only one for none-branching nodes)
+        will evaluate the actual value of the node using the children
+        prepared before as context. '''
+
     if not hasattr(stream, 'read') and hasattr(stream, 'open'):
         stream = stream.open('rb')
 

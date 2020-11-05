@@ -1,3 +1,19 @@
+# Copyright 2020 Florian Wagner <florian@wagner-flo.net>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+''' Hierarchy of types to build yamap schemas out of. '''
+
 import abc
 import collections
 import copy
@@ -22,13 +38,18 @@ from .util import (
 
 
 class yatype(abc.ABC):
+    ''' Abstract base class for all types to derive from. '''
+
     def copy(self, **kwargs):
+        ''' Helper method for creating copies of instances. Will modify
+            values of frozen fields. '''
+
         new = copy.copy(self)
         with unfreeze(new) as unfrozen:
-            for field in get_dataclass_fields(new):
-                if field.name not in kwargs:
+            for fld in get_dataclass_fields(new):
+                if fld.name not in kwargs:
                     continue
-                unfrozen[field.name] = kwargs[field.name]
+                unfrozen[fld.name] = kwargs[fld.name]
         return new
 
 class yamatchable(abc.ABC):
@@ -63,13 +84,15 @@ class yaoneof(yatype,yamatchable):
         return iter(self.types)
 
     def matches(self, node, throw=True):
-        for type in self.types:
-            res = type.matches(node, throw=False)
+        for tpe in self.types:
+            res = tpe.matches(node, throw=False)
             if res is not None:
                 return res
 
         if throw:
             raise MappingError()
+
+        return None
 
 @dataclass(frozen=True)
 class yaexpand(yatype,yatreeish):
@@ -100,6 +123,8 @@ class yanode(yatype,yaresolvable,yamatchable):
 
         if throw:
             raise MappingError()
+
+        return None
 
     def load(self, stream):
         return load_and_map(stream, self)
@@ -172,19 +197,20 @@ class yadict(yamap):
                 raise Exception()
 
             key = key.value
-            type,value_type = zip_first(
-                lambda type: type.matches(key, value),
+            tpe,value_tpe = zip_first(
+                 # pylint: disable=cell-var-from-loop
+                lambda tpe: tpe.matches(key, value),
                 self.types
             )
 
-            if type is None:
+            if tpe is None:
                 raise Exception('no matching type')
 
-            counts[type] += 1
-            result.append((value, yaexpand(key, value_type)))
+            counts[tpe] += 1
+            result.append((value, yaexpand(key, value_tpe)))
 
-        for type in self.types:
-            if type.required and not counts[type]:
+        for tpe in self.types:
+            if tpe.required and not counts[tpe]:
                 raise Exception('required missing')
 
         return result
