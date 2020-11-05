@@ -11,7 +11,7 @@ from dataclasses import (
     InitVar as initvar,
 )
 
-from .mapper import Mapper
+from .mapper import load_and_map
 from .errors import MappingError
 from .util import (
     zip_first,
@@ -82,7 +82,7 @@ class yaexpand(yatype,yatreeish):
 
 
 @dataclass(frozen=True)
-class yanode(yatype,yaresolvable,yamatchable,Mapper):
+class yanode(yatype,yaresolvable,yamatchable):
     tag: initvar[str] = None
     tags: typing.Tuple[str, ...] = ()
     type: typing.Optional[typing.Callable[..., typing.Any]] = None
@@ -99,7 +99,7 @@ class yanode(yatype,yaresolvable,yamatchable,Mapper):
             raise MappingError()
 
     def load(self, stream):
-        return super().load(stream, self)
+        return load_and_map(stream, self)
 
     def resolve(self, value):
         return value if self.type is None else self.type(value)
