@@ -16,7 +16,7 @@ class result:
 class Mapper:
     def load(self, stream, type):
         if not hasattr(stream, 'read') and hasattr(stream, 'open'):
-            steam = stream.open('rb')
+            stream = stream.open('rb')
 
         loader = SafeLoader(stream)
         node = loader.get_single_node()
