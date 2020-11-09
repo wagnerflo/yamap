@@ -118,8 +118,9 @@ class yanode_data:
 
 class yanode(yanode_data,yatype,yaresolvable,yamatchable):
     def __post_init__(self, tag):
-        if not self.tags and tag is not None:
-            self.tags = (tag,)
+        with unfreeze(self) as unfrozen:
+            if not unfrozen.tags and tag is not None:
+                unfrozen.tags = (tag,)
 
     def matches(self, node, throw=True):
         if node.tag in self.tags:
