@@ -30,8 +30,8 @@ class stackitem:
     node: ruamel.yaml.nodes.Node
     schema: 'yamap.schema.yatype'
     parent: 'stackitem'
-    visited: bool = False
     children: typing.List['stackitem'] = dataclasses.field(default_factory=list)
+    visited: bool = dataclasses.field(default=False, init=False)
 
 class Loader(ruamel.yaml.loader.SafeLoader):
     # pylint: disable=abstract-method
