@@ -59,17 +59,20 @@ class yamatchable(abc.ABC):
 
 class yaresolvable(abc.ABC):
     @abc.abstractmethod
+    def is_branch(self, node):
+        pass
+
+    @abc.abstractmethod
     def resolve(self, value):
         pass
 
-@dataclass(frozen=True)
-class yatreeish_data:
-    is_branch: bool = field(default=True, init=False, repr=False)
-
-class yatreeish(yatreeish_data,yaresolvable):
+class yatreeish(yaresolvable):
     @abc.abstractmethod
     def match_children(self, node):
         pass
+
+    def is_branch(self, node):
+        return True
 
 
 @dataclass(frozen=True)
@@ -108,11 +111,12 @@ class yaexpand(yatype,yatreeish):
 
 
 @dataclass(frozen=True)
-class yanode(yatype,yaresolvable,yamatchable):
+class yanode_data:
     tag: initvar[str] = None
     tags: typing.Tuple[str, ...] = ()
     type: typing.Optional[typing.Callable[..., typing.Any]] = None
 
+class yanode(yanode_data,yatype,yaresolvable,yamatchable):
     def __post_init__(self, tag):
         if not self.tags and tag is not None:
             self.tags = (tag,)
@@ -132,14 +136,13 @@ class yanode(yatype,yaresolvable,yamatchable):
     def resolve(self, value):
         return value if self.type is None else self.type(value)
 
-@dataclass(frozen=True)
-class yaleafnode_data:
-    is_branch: bool = field(default=False, init=False, repr=False)
-
-class yaleafnode(yaleafnode_data,yanode):
+class yaleafnode(yanode):
     @abc.abstractmethod
     def construct(self, constructor, node):
         pass
+
+    def is_branch(self, node):
+        return False
 
 class yabranchnode(yanode,yatreeish):
     pass

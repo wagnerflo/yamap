@@ -32,6 +32,10 @@ class stackitem:
     parent: 'stackitem'
     children: typing.List['stackitem'] = dataclasses.field(default_factory=list)
     visited: bool = dataclasses.field(default=False, init=False)
+    is_branch: bool = dataclasses.field(default=False, init=False)
+
+    def __post_init__(self):
+        self.is_branch = self.schema.is_branch(self.node)
 
 class Loader(ruamel.yaml.loader.SafeLoader):
     # pylint: disable=abstract-method
@@ -74,7 +78,7 @@ def load_and_map(stream, schema):
         top = stack[-1]
 
         # first time visiting a branching node
-        if top.schema.is_branch and not top.visited:
+        if top.is_branch and not top.visited:
             top.visited = True
             stack.extend(
                 stackitem(node, schema, top)
@@ -85,7 +89,7 @@ def load_and_map(stream, schema):
             stack.pop()
 
             # second time visiting a branching node
-            if top.schema.is_branch:
+            if top.is_branch:
                 value = top.children
 
             # visiting a leaf node
