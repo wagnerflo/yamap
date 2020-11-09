@@ -122,9 +122,12 @@ class yanode(yanode_data,yatype,yaresolvable,yamatchable):
             if not unfrozen.tags and tag is not None:
                 unfrozen.tags = (tag,)
 
+            unfrozen.tags = tuple(map(re.compile, unfrozen.tags))
+
     def matches(self, node, throw=True):
-        if node.tag in self.tags:
-            return self
+        for tag in self.tags:
+            if tag.fullmatch(node.tag):
+                return self
 
         if throw:
             raise MappingError()
