@@ -4,6 +4,7 @@ __all__ = (
     'yaoneof',
     'yascalar',
     'yastr',
+    'yanull',
     'yadict',
     'yalist',
 )

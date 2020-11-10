@@ -162,6 +162,7 @@ class yascalar(yaleafnode):
     re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
         'tag:yaml.org,2002:str',
         'tag:yaml.org,2002:int',
+        'tag:yaml.org,2002:null',
     )
     construct: typing.Callable[
         [ruamel.yaml.constructor.BaseConstructor, ruamel.yaml.nodes.Node],
@@ -173,6 +174,16 @@ class yastr(yascalar):
     re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
         'tag:yaml.org,2002:str',
     )
+
+@dataclass(frozen=True)
+class yanull(yascalar):
+    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
+        'tag:yaml.org,2002:null',
+    )
+    construct: typing.Callable[
+        [ruamel.yaml.constructor.BaseConstructor, ruamel.yaml.nodes.Node],
+        typing.Any
+    ] = lambda constructor, node: None
 
 
 @dataclass(frozen=True)
@@ -293,6 +304,7 @@ __all__ = (
     'yaoneof',
     'yascalar',
     'yastr',
+    'yanull',
     'yadict',
     'yalist',
 )
