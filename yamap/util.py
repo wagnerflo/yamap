@@ -17,6 +17,7 @@
 
 import contextlib
 import inspect
+import re
 import types
 
 def zip_first(pred, iterable):
@@ -36,6 +37,10 @@ def mkobj(cls_or_instance):
     if inspect.isclass(cls_or_instance):
         return cls_or_instance()
     return cls_or_instance
+
+def re_tuple(*args):
+    ''' Compile all arguments as regex patterns and return as tuple. '''
+    return tuple(map(re.compile, args))
 
 class pair(tuple):
     ''' Helper class for creating new two-element tuples with a nicer

@@ -32,6 +32,7 @@ from .errors import MappingError
 from .util import (
     zip_first,
     mkobj,
+    re_tuple,
     pair,
     squasheddict,
     unfreeze,
@@ -114,19 +115,18 @@ class yaexpand(yatype,yatreeish):
 @dataclass(frozen=True)
 class yanode_data:
     tag: initvar[str] = None
-    tags: typing.Tuple[str, ...] = ()
+    tags: initvar[typing.Tuple[str, ...]] = ()
     type: typing.Optional[typing.Callable[..., typing.Any]] = None
+    re_tags: typing.Tuple[re.Pattern, ...] = field(init=False, default=())
 
 class yanode(yanode_data,yatype,yaresolvable,yamatchable):
-    def __post_init__(self, tag):
-        with unfreeze(self) as unfrozen:
-            if not unfrozen.tags and tag is not None:
-                unfrozen.tags = (tag,)
-
-            unfrozen.tags = tuple(map(re.compile, unfrozen.tags))
+    def __post_init__(self, tag, tags):
+        if tag or tags:
+            with unfreeze(self) as unfrozen:
+                unfrozen.re_tags = re_tuple(*filter(None, tags + (tag,)))
 
     def matches(self, node, throw=True):
-        for tag in self.tags:
+        for tag in self.re_tags:
             if tag.fullmatch(node.tag):
                 return self
 
@@ -155,20 +155,26 @@ class yabranchnode(yanode,yatreeish):
 
 @dataclass(frozen=True)
 class yascalar(yaleafnode):
-    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:str',
-                                    'tag:yaml.org,2002:int')
+    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
+        'tag:yaml.org,2002:str',
+        'tag:yaml.org,2002:int',
+    )
 
     def construct(self, constructor, node):
         return constructor.construct_scalar(node)
 
 @dataclass(frozen=True)
 class yastr(yascalar):
-    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:str',)
+    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
+        'tag:yaml.org,2002:str',
+    )
 
 
 @dataclass(frozen=True)
 class yamap_data:
-    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:map',)
+    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
+        'tag:yaml.org,2002:map',
+    )
 
 class yamap(yamap_data,yabranchnode):
     pass
@@ -194,12 +200,12 @@ class yadict(yamap):
                 return None
             return self.type.matches(value, throw=False)
 
-    type: typing.Callable[[typing.Any], typing.Any] = None
+    type: typing.Optional[typing.Callable[[typing.Any], typing.Any]] = None
     squash: bool = False
     types: typing.Tuple[typeitem, ...] = field(init=False, default=())
 
-    def __post_init__(self, tag):
-        super().__post_init__(tag)
+    def __post_init__(self, tag, tags):
+        super().__post_init__(tag, tags)
         with unfreeze(self) as unfrozen:
             if unfrozen.type is None:
                 unfrozen.type = squasheddict if unfrozen.squash else dict
@@ -251,7 +257,9 @@ class yadict(yamap):
 
 @dataclass(frozen=True)
 class yalist(yabranchnode):
-    tags: typing.Tuple[str, ...] = ('tag:yaml.org,2002:seq',)
+    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
+        'tag:yaml.org,2002:seq',
+    )
     types: yaoneof = field(init=False, default_factory=yaoneof)
 
     def match_children(self, node):
