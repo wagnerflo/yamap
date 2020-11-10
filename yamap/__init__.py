@@ -5,7 +5,5 @@ __all__ = (
     'yascalar',
     'yastr',
     'yadict',
-    'yasquashedmap',
-    'yaexpand',
     'yalist',
 )

@@ -45,6 +45,17 @@ class pair(tuple):
     def __new__(cls, a, b):
         return (a, b)
 
+class squasheddict:
+    ''' Helper class for turning one-element dictionaries into their
+        single value. '''
+
+    def __new__(cls, items):
+        if len(items) == 1:
+            return items[0]
+        if len(items) > 1:
+            raise Exception()
+        return None
+
 @contextlib.contextmanager
 def unfreeze(obj):
     ''' Context manager to clarify code that modifies fields of frozen

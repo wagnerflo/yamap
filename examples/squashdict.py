@@ -12,8 +12,8 @@ from yamap import *
 schema = (
     yalist()
         .can_contain(
-            yasquashedmap()
-                .contains(yadict().zero_or_more('.+', yastr))
+            yadict(squash=True)
+                .required('item\d', yadict().zero_or_more('.+', yastr))
         )
 )
 

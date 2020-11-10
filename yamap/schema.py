@@ -33,6 +33,7 @@ from .util import (
     zip_first,
     mkobj,
     pair,
+    squasheddict,
     unfreeze,
 )
 
@@ -179,6 +180,7 @@ class yadict(yamap):
     class typeitem:
         regex: str
         type: yatype
+        resolve: typing.Callable[[str, typing.Any], typing.Any] = pair
         required: bool = False
         repeat: bool = False
 
@@ -192,8 +194,15 @@ class yadict(yamap):
                 return None
             return self.type.matches(value, throw=False)
 
-    type: typing.Callable[[typing.Any], typing.Any] = dict
+    type: typing.Callable[[typing.Any], typing.Any] = None
+    squash: bool = False
     types: typing.Tuple[typeitem, ...] = field(init=False, default=())
+
+    def __post_init__(self, tag):
+        super().__post_init__(tag)
+        with unfreeze(self) as unfrozen:
+            if unfrozen.type is None:
+                unfrozen.type = squasheddict if unfrozen.squash else dict
 
     def match_children(self, node):
         result = []
@@ -214,7 +223,7 @@ class yadict(yamap):
                 raise Exception('no matching type')
 
             counts[tpe] += 1
-            result.append((value, yaexpand(key, value_tpe)))
+            result.append((value, yaexpand(key, value_tpe, tpe.resolve)))
 
         for tpe in self.types:
             if tpe.required and not counts[tpe]:
@@ -227,45 +236,17 @@ class yadict(yamap):
             types = self.types + (self.typeitem(*args, **kwargs),)
         )
 
-    def optional(self, key, value):
-        return self.copy(re.escape(key), value)
+    def optional(self, regex, schema, type=pair):
+        return self.copy(regex, schema, resolve=type)
 
-    def required(self, key, value):
-        return self.copy(re.escape(key), value, required=True)
+    def required(self, regex, schema, type=pair):
+        return self.copy(regex, schema, resolve=type, required=True)
 
-    def zero_or_more(self, regex, value):
-        return self.copy(regex, value, repeat=True)
+    def zero_or_more(self, regex, schema, type=pair):
+        return self.copy(regex, schema, resolve=type, repeat=True)
 
-    def one_or_more(self, regex, value):
-        return self.copy(regex, value, repeat=True, required=True)
-
-
-@dataclass(frozen=True)
-class yasquashedmap(yamap):
-    type: typing.Callable[[str, typing.Any], typing.Any] = pair
-    value_type: typing.Optional[yatype] = field(init=False, default=None)
-
-    def match_children(self, node):
-        (key,value), = node.value
-        if key.tag != 'tag:yaml.org,2002:str':
-            raise Exception()
-
-        return [(
-            value,
-            yaexpand(
-                key.value,
-                self.value_type.matches(node),
-                type = self.type
-            )
-        )]
-
-    def contains(self, value):
-        if self.value_type is not None:
-            raise Exception()
-        return self.copy(value_type = mkobj(value))
-
-    def resolve(self, value):
-        return value[0]
+    def one_or_more(self, regex, schema, type=pair):
+        return self.copy(regex, schema, resolve=type, repeat=True, required=True)
 
 
 @dataclass(frozen=True)
@@ -288,7 +269,5 @@ __all__ = (
     'yascalar',
     'yastr',
     'yadict',
-    'yasquashedmap',
-    'yaexpand',
     'yalist',
 )
