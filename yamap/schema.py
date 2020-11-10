@@ -18,6 +18,7 @@ import abc
 import collections
 import copy
 import re
+import ruamel
 import typing
 
 from dataclasses import (
@@ -159,9 +160,10 @@ class yascalar(yaleafnode):
         'tag:yaml.org,2002:str',
         'tag:yaml.org,2002:int',
     )
-
-    def construct(self, constructor, node):
-        return constructor.construct_scalar(node)
+    construct: typing.Callable[
+        [ruamel.yaml.constructor.BaseConstructor, ruamel.yaml.nodes.Node],
+        typing.Any
+    ] = lambda constructor, node: constructor.construct_scalar(node)
 
 @dataclass(frozen=True)
 class yastr(yascalar):
