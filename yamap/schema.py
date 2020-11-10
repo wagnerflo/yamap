@@ -29,7 +29,10 @@ from dataclasses import (
 )
 
 from .mapper import load_and_map
-from .errors import MappingError
+from .errors import (
+    MappingError,
+    NoMatchingType,
+)
 from .util import (
     zip_first,
     mkobj,
@@ -96,7 +99,7 @@ class yaoneof(yatype,yamatchable):
                 return res
 
         if throw:
-            raise MappingError()
+            raise NoMatchingType(node)
 
         return None
 
@@ -132,7 +135,7 @@ class yanode(yanode_data,yatype,yaresolvable,yamatchable):
                 return self
 
         if throw:
-            raise MappingError()
+            raise NoMatchingType(node)
 
         return None
 
@@ -216,11 +219,14 @@ class yadict(yamap):
         result = []
         counts = collections.defaultdict(lambda: 0)
 
-        for key,value in node.value:
-            if key.tag != 'tag:yaml.org,2002:str':
-                raise Exception()
+        for key_node,value in node.value:
+            if key_node.tag != 'tag:yaml.org,2002:str':
+                raise MappingError(
+                    'Only plain strings supported as mapping keys',
+                    key_node
+                )
 
-            key = key.value
+            key = key_node.value
             tpe,value_tpe = zip_first(
                  # pylint: disable=cell-var-from-loop
                 lambda tpe: tpe.matches(key, value),
@@ -228,14 +234,23 @@ class yadict(yamap):
             )
 
             if tpe is None:
-                raise Exception('no matching type')
+                raise NoMatchingType(key_node)
 
             counts[tpe] += 1
             result.append((value, yaexpand(key, value_tpe, tpe.resolve)))
 
         for tpe in self.types:
             if tpe.required and not counts[tpe]:
-                raise Exception('required missing')
+                raise MappingError(
+                    'Required key {} missing'.format(tpe.regex.pattern),
+                    node
+                )
+
+            if not tpe.repeat and counts[tpe] > 1:
+                raise MappingError(
+                    'Maximum one of {} allowed'.format(tpe.regex.pattern),
+                    node
+                )
 
         return result
 
