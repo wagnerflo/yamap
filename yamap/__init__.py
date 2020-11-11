@@ -6,6 +6,6 @@ __all__ = (
     'yastr',
     'yanull',
     'yaentry',
-    'yadict',
-    'yalist',
+    'yamap',
+    'yaseq',
 )

@@ -16,11 +16,11 @@ class entry:
     val: 'Any'
 
 schema = (
-    yadict(type=list)
+    yamap(type=list)
       .zero_or_more(
           'item\d',
           type = entry,
-          schema = yadict().zero_or_more('.+', yastr)
+          schema = yamap().zero_or_more('.+', yastr)
       )
 )
 

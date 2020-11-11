@@ -91,19 +91,18 @@ class yatreeish(yaresolvable):
 
 @dataclass(frozen=True)
 class yaoneof(yatype,yamatchable):
-    types: typing.Tuple[yatype, ...] = field(init=False, default=())
+    entries: typing.Tuple[yatype, ...] = field(init=False, default=())
 
-    def __init__(self, *types):
+    def __init__(self, *entries):
         with unfreeze(self) as unfrozen:
-            unfrozen.types = tuple(map(mkobj, types))
+            unfrozen.entries = tuple(map(mkobj, entries))
 
     def __iter__(self):
-        return iter(self.types)
+        return iter(self.entries)
 
     def matches(self, node, throw=True):
-        for tpe in self.types:
-            res = tpe.matches(node, throw=False)
-            if res is not None:
+        for entry in self.entries:
+            if res := entry.matches(node, throw=False):
                 return res
 
         if throw:
@@ -111,14 +110,17 @@ class yaoneof(yatype,yamatchable):
 
         return None
 
+    def case(self, entry):
+        return self.copy(entries = self.entries + (mkobj(entry),))
+
 @dataclass(frozen=True)
 class yaexpand(yatype,yatreeish):
     key: str
-    value_type: yatype
+    value_schema: yatype
     type: PairlikeCallable = pair
 
     def match_children(self, node):
-        return [(node, self.value_type.matches(node))]
+        return [(node, self.value_schema.matches(node))]
 
     def resolve(self, value):
         return self.type(self.key, value[0])
@@ -209,15 +211,10 @@ class yaentry(yatype):
     def keys_repr(self):
         return '({})'.format(' | '.join(r.pattern for r,s,t in self.keys))
 
+
 @dataclass(frozen=True)
-class yamap_data:
+class yamap(yabranchnode):
     re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:map')
-
-class yamap(yamap_data,yabranchnode):
-    pass
-
-@dataclass(frozen=True)
-class yadict(yamap):
     type: typing.Optional[typing.Callable[[typing.Any], typing.Any]] = None
     squash: bool = False
     entries: typing.Tuple[yaentry, ...] = field(init=False, default=())
@@ -275,10 +272,10 @@ class yadict(yamap):
             yaentry(required=required, repeat=repeat).case(regex, schema, type)
         )
 
-    def optional(self, regex, schema, type=pair):
+    def zero_or_one(self, regex, schema, type=pair):
         return self.case(regex, schema, type)
 
-    def required(self, regex, schema, type=pair):
+    def exactly_one(self, regex, schema, type=pair):
         return self.case(regex, schema, type, required=True)
 
     def zero_or_more(self, regex, schema, type=pair):
@@ -289,18 +286,18 @@ class yadict(yamap):
 
 
 @dataclass(frozen=True)
-class yalist(yabranchnode):
+class yaseq(yabranchnode):
     re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:seq')
-    types: yaoneof = field(init=False, default_factory=yaoneof)
+    schema: yaoneof = field(init=False, default_factory=yaoneof)
 
     def match_children(self, node):
         return [
-            (item, self.types.matches(item))
+            (item, self.schema.matches(item))
             for item in node.value
         ]
 
-    def can_contain(self, value):
-        return self.copy(types = yaoneof(*self.types, value))
+    def case(self, value):
+        return self.copy(schema = self.schema.case(value))
 
 
 __all__ = (
@@ -309,6 +306,6 @@ __all__ = (
     'yastr',
     'yanull',
     'yaentry',
-    'yadict',
-    'yalist',
+    'yamap',
+    'yaseq',
 )

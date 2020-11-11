@@ -10,10 +10,10 @@ yaml = '''
 from yamap import *
 
 schema = (
-    yalist()
-        .can_contain(
-            yadict(squash=True)
-                .required('item\d', yadict().zero_or_more('.+', yastr))
+    yaseq()
+        .case(
+            yamap(squash=True)
+                .exactly_one('item\d', yamap().zero_or_more('.+', yastr))
         )
 )
 

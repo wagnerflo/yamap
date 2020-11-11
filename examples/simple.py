@@ -10,10 +10,10 @@ env: { NAME: Bob }
 from yamap import *
 
 schema = (
-    yadict()
-        .required('command',   yastr)
-        .optional('arguments', yalist().can_contain(yastr))
-        .optional('env',       yadict().zero_or_more('[A-Z]+', yastr))
+    yamap()
+        .exactly_one('command',   yastr)
+        .zero_or_one('arguments', yaseq().case(yastr))
+        .zero_or_one('env',       yamap().zero_or_more('[A-Z]+', yastr))
 )
 
 print(schema.load(yaml))
