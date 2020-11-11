@@ -42,6 +42,14 @@ from .util import (
     unfreeze,
 )
 
+# type aliases
+PairlikeCallable = typing.Callable[[str, typing.Any], typing.Any]
+ConstructorCallable = typing.Callable[
+    [ruamel.yaml.constructor.BaseConstructor, ruamel.yaml.nodes.Node],
+    typing.Any
+]
+EntryKey = typing.Tuple[re.Pattern, 'yatype', PairlikeCallable]
+RegexTuple = typing.Tuple[re.Pattern, ...]
 
 class yatype(abc.ABC):
     ''' Abstract base class for all types to derive from. '''
@@ -107,7 +115,7 @@ class yaoneof(yatype,yamatchable):
 class yaexpand(yatype,yatreeish):
     key: str
     value_type: yatype
-    type: typing.Callable[[str, typing.Any], typing.Any] = pair
+    type: PairlikeCallable = pair
 
     def match_children(self, node):
         return [(node, self.value_type.matches(node))]
@@ -121,7 +129,7 @@ class yanode_data:
     tag: initvar[str] = None
     tags: initvar[typing.Tuple[str, ...]] = ()
     type: typing.Optional[typing.Callable[..., typing.Any]] = None
-    re_tags: typing.Tuple[re.Pattern, ...] = field(init=False, default=())
+    re_tags: RegexTuple = field(init=False, default=())
 
 class yanode(yanode_data,yatype,yaresolvable,yamatchable):
     def __post_init__(self, tag, tags):
@@ -159,38 +167,26 @@ class yabranchnode(yanode,yatreeish):
 
 @dataclass(frozen=True)
 class yascalar(yaleafnode):
-    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
+    re_tags: RegexTuple = re_tuple(
         'tag:yaml.org,2002:str',
         'tag:yaml.org,2002:int',
         'tag:yaml.org,2002:null',
     )
-    construct: typing.Callable[
-        [ruamel.yaml.constructor.BaseConstructor, ruamel.yaml.nodes.Node],
-        typing.Any
-    ] = lambda constructor, node: constructor.construct_scalar(node)
+    construct: ConstructorCallable = lambda c,n: c.construct_scalar(n)
 
 @dataclass(frozen=True)
 class yastr(yascalar):
-    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
-        'tag:yaml.org,2002:str',
-    )
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:str')
 
 @dataclass(frozen=True)
 class yanull(yascalar):
-    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
-        'tag:yaml.org,2002:null',
-    )
-    construct: typing.Callable[
-        [ruamel.yaml.constructor.BaseConstructor, ruamel.yaml.nodes.Node],
-        typing.Any
-    ] = lambda constructor, node: None
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:null')
+    construct: ConstructorCallable = lambda c,n: None
 
 
 @dataclass(frozen=True)
 class yamap_data:
-    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
-        'tag:yaml.org,2002:map',
-    )
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:map')
 
 class yamap(yamap_data,yabranchnode):
     pass
@@ -285,9 +281,7 @@ class yadict(yamap):
 
 @dataclass(frozen=True)
 class yalist(yabranchnode):
-    re_tags: typing.Tuple[re.Pattern, ...] = re_tuple(
-        'tag:yaml.org,2002:seq',
-    )
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:seq')
     types: yaoneof = field(init=False, default_factory=yaoneof)
 
     def match_children(self, node):
