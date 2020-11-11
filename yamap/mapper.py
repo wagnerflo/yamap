@@ -28,13 +28,13 @@ class stackitem:
         items on the Mapper stack. '''
 
     node: ruamel.yaml.nodes.Node
-    schema: 'yamap.schema.yatype'
-    parent: 'stackitem'
-    children: typing.List['stackitem'] = dataclasses.field(default_factory=list)
+    schema: 'yamap.schema.MatchResult'
+    parent: typing.Optional['stackitem']
+    children: typing.List[typing.Any] = dataclasses.field(default_factory=list)
     visited: bool = dataclasses.field(default=False, init=False)
     is_branch: bool = dataclasses.field(default=False, init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.is_branch = self.schema.is_branch(self.node)
 
 class Loader(ruamel.yaml.loader.SafeLoader):
@@ -51,7 +51,7 @@ class Loader(ruamel.yaml.loader.SafeLoader):
     yaml_path_resolvers: typing.Dict[typing.Any, typing.Any] = {}
     yaml_implicit_resolvers: typing.Dict[typing.Any, typing.Any] = {}
 
-def load_and_map(stream, schema):
+def load_and_map(stream: typing.Any, schema: 'yamap.schema.Mappable') -> typing.Any:
     ''' Iterative stack based implementation of the mapper.
 
         Visits each none-branch node once and each branch node (that
@@ -82,7 +82,7 @@ def load_and_map(stream, schema):
             top.visited = True
             stack.extend(
                 stackitem(node, schema, top)
-                for node,schema in reversed(top.schema.match_children(top.node))
+                for node,schema in reversed(top.schema.match_children(top.node)) # type: ignore
             )
 
         else:
@@ -94,14 +94,14 @@ def load_and_map(stream, schema):
 
             # visiting a leaf node
             else:
-                value = top.schema.matches(top.node).construct(
+                value = top.schema.matches(top.node).construct( # type: ignore
                     loader, top.node
                 )
 
             # convert type
             value = top.schema.resolve(value)
 
-            if stack:
+            if top.parent:
                 top.parent.children.append(value)
             else:
                 return value

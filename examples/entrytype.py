@@ -9,11 +9,12 @@ item2:
 
 from yamap import *
 from dataclasses import dataclass
+from typing import Any
 
 @dataclass
 class entry:
     key: str
-    val: 'Any'
+    val: Any
 
 schema = (
     yamap(type=list)

@@ -20,7 +20,15 @@ import inspect
 import re
 import types
 
-def zip_first(pred, iterable):
+from collections.abc import Iterable
+from typing import (
+    Any,
+    Callable,
+    Iterator,
+    Tuple,
+)
+
+def zip_first(pred: Callable[[Any], Any], iterable: Iterable) -> Tuple[Any, Any]:
     ''' Evaluate pred(item) for each item in iterable until this call's
         result is a True value, then return (item, pred(item). If
         iterable is exhausted beforehand return (None, None). '''
