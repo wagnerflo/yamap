@@ -185,6 +185,31 @@ class yanull(yascalar):
 
 
 @dataclass(frozen=True)
+class yaentry(yatype):
+    required: bool = False
+    repeat: bool = False
+    keys: typing.Tuple[EntryKey, ...] = field(init=False, default=())
+
+    def match_item(self, key, value):
+        for (regex, schema, type) in self.keys:
+            if not regex.fullmatch(key):
+                continue
+
+            if res := schema.matches(value, throw=False):
+                return (res, type)
+
+        return None
+
+    def case(self, pattern, schema, type=pair):
+        return self.copy(
+            keys = self.keys + ((re.compile(pattern), mkobj(schema), type),)
+        )
+
+    @property
+    def keys_repr(self):
+        return '({})'.format(' | '.join(r.pattern for r,s,t in self.keys))
+
+@dataclass(frozen=True)
 class yamap_data:
     re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:map')
 
@@ -193,28 +218,9 @@ class yamap(yamap_data,yabranchnode):
 
 @dataclass(frozen=True)
 class yadict(yamap):
-
-    @dataclass(frozen=True)
-    class typeitem:
-        regex: str
-        type: yatype
-        resolve: typing.Callable[[str, typing.Any], typing.Any] = pair
-        required: bool = False
-        repeat: bool = False
-
-        def __post_init__(self):
-            with unfreeze(self) as unfrozen:
-                unfrozen.regex = re.compile(unfrozen.regex)
-                unfrozen.type = mkobj(unfrozen.type)
-
-        def matches(self, key, value):
-            if not self.regex.fullmatch(key):
-                return None
-            return self.type.matches(value, throw=False)
-
     type: typing.Optional[typing.Callable[[typing.Any], typing.Any]] = None
     squash: bool = False
-    types: typing.Tuple[typeitem, ...] = field(init=False, default=())
+    entries: typing.Tuple[yaentry, ...] = field(init=False, default=())
 
     def __post_init__(self, tag, tags):
         super().__post_init__(tag, tags)
@@ -234,49 +240,52 @@ class yadict(yamap):
                 )
 
             key = key_node.value
-            tpe,value_tpe = zip_first(
+            entry,match = zip_first(
                  # pylint: disable=cell-var-from-loop
-                lambda tpe: tpe.matches(key, value),
-                self.types
+                lambda entry: entry.match_item(key, value),
+                self.entries
             )
 
-            if tpe is None:
+            if entry is None:
                 raise NoMatchingType(key_node)
 
-            counts[tpe] += 1
-            result.append((value, yaexpand(key, value_tpe, tpe.resolve)))
+            counts[entry] += 1
+            result.append((value, yaexpand(key, *match)))
 
-        for tpe in self.types:
-            if tpe.required and not counts[tpe]:
+        for entry in self.entries:
+            if entry.required and not counts[entry]:
                 raise MappingError(
-                    'Required key {} missing'.format(tpe.regex.pattern),
+                    'Required key {} missing'.format(entry.keys_repr),
                     node
                 )
 
-            if not tpe.repeat and counts[tpe] > 1:
+            if not entry.repeat and counts[entry] > 1:
                 raise MappingError(
-                    'Maximum one of {} allowed'.format(tpe.regex.pattern),
+                    'Maximum one of {} allowed'.format(entry.keys_repr),
                     node
                 )
 
         return result
 
-    def copy(self, *args, **kwargs):
-        return super().copy(
-            types = self.types + (self.typeitem(*args, **kwargs),)
+    def copy(self, entry):
+        return super().copy(entries = self.entries + (entry,))
+
+    def case(self, regex, schema, type=pair, repeat=False, required=False):
+        return self.copy(
+            yaentry(required=required, repeat=repeat).case(regex, schema, type)
         )
 
     def optional(self, regex, schema, type=pair):
-        return self.copy(regex, schema, resolve=type)
+        return self.case(regex, schema, type)
 
     def required(self, regex, schema, type=pair):
-        return self.copy(regex, schema, resolve=type, required=True)
+        return self.case(regex, schema, type, required=True)
 
     def zero_or_more(self, regex, schema, type=pair):
-        return self.copy(regex, schema, resolve=type, repeat=True)
+        return self.case(regex, schema, type, repeat=True)
 
     def one_or_more(self, regex, schema, type=pair):
-        return self.copy(regex, schema, resolve=type, repeat=True, required=True)
+        return self.case(regex, schema, type, repeat=True, required=True)
 
 
 @dataclass(frozen=True)
@@ -299,6 +308,7 @@ __all__ = (
     'yascalar',
     'yastr',
     'yanull',
+    'yaentry',
     'yadict',
     'yalist',
 )
