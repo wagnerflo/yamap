@@ -20,13 +20,19 @@ import inspect
 import re
 import types
 
-from collections.abc import Iterable
+from collections.abc import Iterable,Sequence
 from typing import (
     Any,
     Callable,
-    Iterator,
     Tuple,
+    Type,
+    TypeVar,
+    overload,
 )
+
+Object = TypeVar('Object', bound=object)
+A = TypeVar('A')
+B = TypeVar('B')
 
 def zip_first(pred: Callable[[Any], Any], iterable: Iterable) -> Tuple[Any, Any]:
     ''' Evaluate pred(item) for each item in iterable until this call's
@@ -39,6 +45,14 @@ def zip_first(pred: Callable[[Any], Any], iterable: Iterable) -> Tuple[Any, Any]
 
     return (None, None)
 
+@overload
+def mkobj(cls_or_instance: Type[Object]) -> Object:
+    pass
+
+@overload
+def mkobj(cls_or_instance: Object) -> Object:
+    pass
+
 def mkobj(cls_or_instance):
     ''' If cls_or_instance is a class then return cls_or_instance()
         otherwise return cls_or_instance. '''
@@ -46,28 +60,20 @@ def mkobj(cls_or_instance):
         return cls_or_instance()
     return cls_or_instance
 
-def re_tuple(*args):
+def re_tuple(*args: Iterable[str]) -> Tuple[re.Pattern, ...]:
     ''' Compile all arguments as regex patterns and return as tuple. '''
     return tuple(map(re.compile, args))
 
-class pair(tuple):
-    ''' Helper class for creating new two-element tuples with a nicer
-        constructor. It will not create an instance of pair, but simply
-        return the tuple (a, b).'''
+def pair(a: A, b: B) -> Tuple[A, B]:
+    ''' Helper function for creating new two-element tuples. '''
+    return (a, b)
 
-    def __new__(cls, a, b):
-        return (a, b)
-
-class squasheddict:
-    ''' Helper class for turning one-element dictionaries into their
+def squasheddict(items: Sequence[A]) -> A:
+    ''' Helper function for turning one-element dictionaries into their
         single value. '''
-
-    def __new__(cls, items):
-        if len(items) == 1:
-            return items[0]
-        if len(items) > 1:
-            raise Exception()
-        return None
+    if len(items) == 1:
+        return items[0]
+    raise RuntimeError('Not exactly one element')
 
 @contextlib.contextmanager
 def unfreeze(obj):

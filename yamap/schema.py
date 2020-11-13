@@ -14,34 +14,28 @@
 
 ''' Hierarchy of types to build yamap schemas out of. '''
 
-import abc
-import collections
-import copy
-import re
-import ruamel
+from __future__ import annotations
 
+from abc import ABC,abstractmethod
+from collections import defaultdict
+from collections.abc import Iterable,Iterator
+from copy import copy as mkcopy
 from dataclasses import (
     dataclass,
     field,
     fields as get_dataclass_fields,
     InitVar as initvar,
 )
-from contextlib import (
-    suppress,
-)
-from ruamel.yaml.nodes import (
-    Node as YAMLNode,
-)
-from ruamel.yaml.constructor import (
-    BaseConstructor,
+from contextlib import suppress
+from re import (
+    compile as re_compile,
+    Pattern as RegexPattern,
 )
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterator,
     List,
-    Literal,
     Optional,
     Tuple,
     Type,
@@ -49,11 +43,11 @@ from typing import (
     Union,
 )
 
+from ruamel.yaml.nodes import Node as YAMLNode
+from ruamel.yaml.constructor import BaseConstructor
+
 from .mapper import load_and_map
-from .errors import (
-    MappingError,
-    NoMatchingType,
-)
+from .errors import MappingError,NoMatchingType
 from .util import (
     zip_first,
     mkobj,
@@ -64,27 +58,21 @@ from .util import (
 )
 
 # type aliases
-MatchResult = Union['yaleafnode','yabranchnode']
-Mappable = Union['yaoneof', 'yaexpand', MatchResult]
-MappableAndTypes = Union[Mappable, Type['yaoneof'], Type['yaexpand'],
-                         Type['yaleafnode'], Type['yabranchnode']]
-PairlikeCallable = Callable[[str, Any], Any]
-ConstructorCallable = Callable[[BaseConstructor, YAMLNode], Any]
-EntryKey = Tuple[re.Pattern, Mappable, PairlikeCallable]
-RegexTuple = Tuple[re.Pattern, ...]
-MatchChildrenResult = List[Tuple[YAMLNode, MatchResult]]
-EntryMatchResult = Optional[Tuple[str, MatchResult, PairlikeCallable]]
-S = TypeVar('S', bound='yanode', covariant=True)
-T = TypeVar('T')
+PairlikeCallable = Callable[[Any, Any], Any]
+ConstructCallable = Callable[[BaseConstructor,YAMLNode], Any]
+RegexTuple = Tuple[RegexPattern, ...]
+MatchedChildren = Iterable[Tuple[YAMLNode, 'yatype']]
+EntryMatchResult = Optional[Tuple[str, 'yatype', PairlikeCallable]]
+Copyable = TypeVar('Copyable', bound='yacopyable')
+MatchArgument = Union['yatype', Type['yatype']]
 
-class yatype(abc.ABC):
-    ''' Abstract base class for all types to derive from. '''
 
-    def copy(self: T, **kwargs) -> T:
+class yacopyable:
+    def copy(self: Copyable, **kwargs) -> Copyable:
         ''' Helper method for creating copies of instances. Will modify
             values of frozen fields. '''
 
-        new = copy.copy(self)
+        new = mkcopy(self)
         with unfreeze(new) as unfrozen:
             for fld in get_dataclass_fields(new):
                 if fld.name not in kwargs:
@@ -92,64 +80,71 @@ class yatype(abc.ABC):
                 unfrozen[fld.name] = kwargs[fld.name]
         return new
 
-class yamatchable(abc.ABC):
-    @abc.abstractmethod
-    def matches(self, node: YAMLNode) -> MatchResult:
+class yamatchable(ABC,yacopyable):
+    ''' Abstract base class for all types to derive from. '''
+
+    @abstractmethod
+    def matches(self, node: YAMLNode) -> yatype:
         pass
 
-class yaresolvable(abc.ABC):
-    @abc.abstractmethod
-    def is_branch(self, node: YAMLNode) -> bool:
+    def load(self, stream: Any) -> Any:
+        return load_and_map(stream, self)
+
+class yatype(yamatchable):
+    @abstractmethod
+    def construct_leaf(self, constructor: BaseConstructor,
+                             node: YAMLNode) -> Any:
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def resolve(self, value: Any) -> Any:
         pass
 
-class yatreeish(yaresolvable):
-    @abc.abstractmethod
-    def match_children(self, node: YAMLNode) -> MatchChildrenResult:
+    @abstractmethod
+    def match_children(self, node: YAMLNode) -> Optional[MatchedChildren]:
         pass
 
-    def is_branch(self, node: YAMLNode) -> bool:
-        return True
 
 
 @dataclass(frozen=True)
-class yaoneof(yatype,yamatchable):
-    entries: Tuple[Mappable, ...] = field(init=False, default=())
+class yaoneof(yamatchable):
+    entries: Tuple[yamatchable, ...] = field(init=False, default=())
 
-    def __init__(self, *entries: List[MappableAndTypes]) -> None:
+    def __init__(self, *entries: List[MatchArgument]) -> None:
         with unfreeze(self) as unfrozen:
             unfrozen.entries = tuple(map(mkobj, entries))
 
-    def __iter__(self) -> Iterator[yatype]:
+    def __iter__(self) -> Iterator[yamatchable]:
         return iter(self.entries)
 
-    def matches(self, node: YAMLNode) -> MatchResult:
+    def matches(self, node: YAMLNode) -> yatype:
         for entry in self.entries:
             with suppress(NoMatchingType):
                 return entry.matches(node)
 
         raise NoMatchingType(node)
 
-    def case(self, entry: MappableAndTypes):
+    def case(self, entry: MatchArgument):
         return self.copy(entries = self.entries + (mkobj(entry),))
 
 @dataclass(frozen=True)
-class yaexpand(yatype,yatreeish,yamatchable):
+class yaexpand(yatype):
     key: str
-    value_schema: Mappable
+    value_schema: yamatchable
     type: PairlikeCallable = pair
 
-    def matches(self, node: YAMLNode) -> MatchResult:
+    def matches(self, node: YAMLNode) -> yatype:
         return self.value_schema.matches(node)
 
-    def match_children(self, node: YAMLNode) -> MatchChildrenResult:
-        return [(node, self.value_schema.matches(node))]
+    def match_children(self, node: YAMLNode) -> MatchedChildren:
+        yield (node, self.value_schema.matches(node))
 
     def resolve(self, value: List[Any]) -> Any:
-        return self.type(self.key, value[0]) # type: ignore
+        return self.type(self.key, value[0])
+
+    def construct_leaf(self, constructor: BaseConstructor,
+                             node: YAMLNode) -> Any:
+        raise NotImplementedError()
 
 
 @dataclass(frozen=True)
@@ -159,16 +154,16 @@ class yanode_data:
     type: Optional[Callable[..., Any]] = None
     re_tags: RegexTuple = field(init=False, default=())
 
-class yanode(yanode_data,yatype,yaresolvable,yamatchable):
+class yanode(yanode_data,yatype):
     def __post_init__(self, tag: str, tags: Tuple[str, ...]) -> None:
         if tag or tags:
             with unfreeze(self) as unfrozen:
                 unfrozen.re_tags = re_tuple(*filter(None, tags + (tag,)))
 
-    def matches(self, node: YAMLNode) -> MatchResult:
+    def matches(self, node: YAMLNode) -> yatype:
         for tag in self.re_tags:
             if tag.fullmatch(node.tag):
-                return self # type: ignore
+                return self
 
         raise NoMatchingType(node)
 
@@ -176,20 +171,13 @@ class yanode(yanode_data,yatype,yaresolvable,yamatchable):
         return value if self.type is None else self.type(value)
 
 class yaleafnode(yanode):
-    @abc.abstractmethod
-    def construct(self, constructor: BaseConstructor, node: YAMLNode) -> Any:
-        pass
+    def match_children(self, node: YAMLNode) -> None:
+        return None
 
-    def is_branch(self, node: YAMLNode) -> bool:
-        return False
-
-    def load(self, stream: Any) -> Any:
-        return load_and_map(stream, self)
-
-
-class yabranchnode(yanode,yatreeish):
-    def load(self, stream: Any) -> Any:
-        return load_and_map(stream, self)
+class yabranchnode(yanode):
+    def construct_leaf(self, constructor: BaseConstructor,
+                             node: YAMLNode) -> Any:
+        raise NotImplementedError()
 
 
 def as_scalar(constructor: BaseConstructor, node: YAMLNode) -> Any:
@@ -204,7 +192,11 @@ class yascalar(yaleafnode):
         'tag:yaml.org,2002:int',
         'tag:yaml.org,2002:null',
     )
-    construct: ConstructorCallable = as_scalar # type: ignore
+    construct: ConstructCallable = as_scalar
+
+    def construct_leaf(self, constructor: BaseConstructor,
+                             node: YAMLNode) -> Any:
+        return self.construct(constructor, node) # type: ignore
 
 @dataclass(frozen=True)
 class yastr(yascalar):
@@ -216,10 +208,11 @@ class yanull(yascalar):
 
 
 @dataclass(frozen=True)
-class yaentry(yatype):
+class yaentry(yacopyable):
     required: bool = False
     repeat: bool = False
-    keys: Tuple[EntryKey, ...] = field(init=False, default=())
+    keys: Tuple[Tuple[RegexPattern, yamatchable, PairlikeCallable], ...] = \
+        field(init=False, default=())
 
     def match_item(self, key: str, value: YAMLNode) -> EntryMatchResult:
         for (regex, schema, type) in self.keys:
@@ -231,10 +224,10 @@ class yaentry(yatype):
 
         return None
 
-    def case(self, pattern: str, schema: MappableAndTypes,
-                   type: PairlikeCallable = pair) -> 'yaentry':
+    def case(self, pattern: str, schema: MatchArgument,
+                   type: PairlikeCallable = pair) -> yaentry:
         return self.copy(
-            keys = self.keys + ((re.compile(pattern), mkobj(schema), type),)
+            keys = self.keys + ((re_compile(pattern), mkobj(schema), type),)
         )
 
     @property
@@ -254,11 +247,10 @@ class yamap(yabranchnode):
             if unfrozen.type is None:
                 unfrozen.type = squasheddict if unfrozen.squash else dict
 
-    def match_children(self, node: YAMLNode) -> MatchChildrenResult:
-        result: MatchChildrenResult = []
-        counts: Dict[yaentry, int]  = collections.defaultdict(lambda: 0)
+    def match_children(self, node: YAMLNode) -> MatchedChildren:
+        counts: Dict[yaentry, int] = defaultdict(lambda: 0)
 
-        for key_node,value in node.value:
+        for key_node,value in reversed(node.value):
             if key_node.tag != 'tag:yaml.org,2002:str':
                 raise MappingError(
                     'Only plain strings supported as mapping keys',
@@ -276,7 +268,7 @@ class yamap(yabranchnode):
                 raise NoMatchingType(key_node)
 
             counts[entry] += 1
-            result.append((value, yaexpand(*match))) # type:ignore
+            yield (value, yaexpand(*match))
 
         for entry in self.entries:
             if entry.required and not counts[entry]:
@@ -291,32 +283,30 @@ class yamap(yabranchnode):
                     node
                 )
 
-        return result
-
-    def entry(self, entry: yaentry) -> 'yamap':
+    def entry(self, entry: yaentry) -> yamap:
         return self.copy(entries = self.entries + (entry,))
 
-    def case(self, regex: str, schema: MappableAndTypes,
+    def case(self, regex: str, schema: MatchArgument,
                    type: PairlikeCallable = pair,
-                   repeat: bool = False, required: bool = False) -> 'yamap':
+                   repeat: bool = False, required: bool = False) -> yamap:
         return self.entry(
             yaentry(required=required, repeat=repeat).case(regex, schema, type)
         )
 
-    def zero_or_one(self, regex: str, schema: MappableAndTypes,
-                          type: PairlikeCallable = pair) -> 'yamap':
+    def zero_or_one(self, regex: str, schema: MatchArgument,
+                          type: PairlikeCallable = pair) -> yamap:
         return self.case(regex, schema, type)
 
-    def exactly_one(self, regex: str, schema: MappableAndTypes,
-                          type: PairlikeCallable = pair) -> 'yamap':
+    def exactly_one(self, regex: str, schema: MatchArgument,
+                          type: PairlikeCallable = pair) -> yamap:
         return self.case(regex, schema, type, required=True)
 
-    def zero_or_more(self, regex: str, schema: MappableAndTypes,
-                           type: PairlikeCallable = pair) -> 'yamap':
+    def zero_or_more(self, regex: str, schema: MatchArgument,
+                           type: PairlikeCallable = pair) -> yamap:
         return self.case(regex, schema, type, repeat=True)
 
-    def one_or_more(self, regex: str, schema: MappableAndTypes,
-                          type: PairlikeCallable = pair) -> 'yamap':
+    def one_or_more(self, regex: str, schema: MatchArgument,
+                          type: PairlikeCallable = pair) -> yamap:
         return self.case(regex, schema, type, repeat=True, required=True)
 
 
@@ -325,13 +315,11 @@ class yaseq(yabranchnode):
     re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:seq')
     schema: yaoneof = field(init=False, default_factory=yaoneof)
 
-    def match_children(self, node: YAMLNode) -> MatchChildrenResult:
-        return [
-            (item, self.schema.matches(item))
-            for item in node.value
-        ]
+    def match_children(self, node: YAMLNode) -> MatchedChildren:
+        for item in reversed(node.value):
+            yield (item, self.schema.matches(item))
 
-    def case(self, schema: MappableAndTypes) -> 'yaseq':
+    def case(self, schema: MatchArgument) -> yaseq:
         return self.copy(schema = self.schema.case(schema))
 
 

@@ -15,6 +15,8 @@
 ''' Contains the core functionality of this library as well as a bunch
     of related helper classes. '''
 
+from __future__ import annotations
+
 import dataclasses
 import typing
 
@@ -28,14 +30,10 @@ class stackitem:
         items on the Mapper stack. '''
 
     node: ruamel.yaml.nodes.Node
-    schema: 'yamap.schema.MatchResult'
-    parent: typing.Optional['stackitem']
+    schema: yamap.schema.yatype
+    parent: typing.Optional[stackitem]
     children: typing.List[typing.Any] = dataclasses.field(default_factory=list)
-    visited: bool = dataclasses.field(default=False, init=False)
-    is_branch: bool = dataclasses.field(default=False, init=False)
-
-    def __post_init__(self) -> None:
-        self.is_branch = self.schema.is_branch(self.node)
+    branch_visited: bool = dataclasses.field(default=False, init=False)
 
 class Loader(ruamel.yaml.loader.SafeLoader):
     # pylint: disable=abstract-method
@@ -51,7 +49,7 @@ class Loader(ruamel.yaml.loader.SafeLoader):
     yaml_path_resolvers: typing.Dict[typing.Any, typing.Any] = {}
     yaml_implicit_resolvers: typing.Dict[typing.Any, typing.Any] = {}
 
-def load_and_map(stream: typing.Any, schema: 'yamap.schema.Mappable') -> typing.Any:
+def load_and_map(stream: typing.Any, schema: 'yamap.schema.yamatchable') -> typing.Any:
     ''' Iterative stack based implementation of the mapper.
 
         Visits each none-branch node once and each branch node (that
@@ -75,33 +73,42 @@ def load_and_map(stream: typing.Any, schema: 'yamap.schema.Mappable') -> typing.
     stack = [stackitem(node, schema.matches(node), None)]
 
     while stack:
+        # peak at top of stack
         top = stack[-1]
 
-        # first time visiting a branching node
-        if top.is_branch and not top.visited:
-            top.visited = True
-            stack.extend(
-                stackitem(node, schema, top)
-                for node,schema in reversed(top.schema.match_children(top.node)) # type: ignore
+        # first time visiting this node
+        if not top.branch_visited:
+            children = top.schema.match_children(top.node)
+
+            # and it is a branching node
+            if children is not None:
+                # push stackitems of its children
+                for node,schema in children:
+                    stack.append(stackitem(node, schema, top))
+
+                # mark node as visited
+                top.branch_visited = True
+
+                # and iterate
+                continue
+
+        # otherwise pop from stack
+        stack.pop()
+
+        # second time visiting a branching node
+        if top.branch_visited:
+            value = top.children
+
+        # visiting a leaf node
+        else:
+            value = top.schema.matches(top.node).construct_leaf(
+                loader, top.node
             )
 
+        # convert type
+        value = top.schema.resolve(value)
+
+        if top.parent:
+            top.parent.children.append(value)
         else:
-            stack.pop()
-
-            # second time visiting a branching node
-            if top.is_branch:
-                value = top.children
-
-            # visiting a leaf node
-            else:
-                value = top.schema.matches(top.node).construct( # type: ignore
-                    loader, top.node
-                )
-
-            # convert type
-            value = top.schema.resolve(value)
-
-            if top.parent:
-                top.parent.children.append(value)
-            else:
-                return value
+            return value
