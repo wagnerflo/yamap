@@ -3,6 +3,7 @@ min-public-methods=0
 
 [DESIGN]
 max-parents=100
+max-args=8
 
 [MESSAGES CONTROL]
-disable=invalid-name
+disable=invalid-name,cyclic-import,duplicate-code,redefined-builtin

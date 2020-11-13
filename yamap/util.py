@@ -15,6 +15,8 @@
 ''' Just a bunch of unrealated helper functions not fitting
     elsewhere. '''
 
+from __future__ import annotations
+
 import contextlib
 import inspect
 import re
@@ -29,6 +31,9 @@ from typing import (
     TypeVar,
     overload,
 )
+
+from ruamel.yaml.nodes import Node as YAMLNode
+from ruamel.yaml.constructor import BaseConstructor
 
 Object = TypeVar('Object', bound=object)
 A = TypeVar('A')
@@ -60,7 +65,7 @@ def mkobj(cls_or_instance):
         return cls_or_instance()
     return cls_or_instance
 
-def re_tuple(*args: Iterable[str]) -> Tuple[re.Pattern, ...]:
+def re_tuple(*args: Iterable[str]) -> Tuple[re.Pattern, ...]: # pylint: disable=E1136
     ''' Compile all arguments as regex patterns and return as tuple. '''
     return tuple(map(re.compile, args))
 
@@ -68,12 +73,18 @@ def pair(a: A, b: B) -> Tuple[A, B]:
     ''' Helper function for creating new two-element tuples. '''
     return (a, b)
 
-def squasheddict(items: Sequence[A]) -> A:
+def squasheddict(items: Sequence[A]) -> A: # pylint: disable=E1136
     ''' Helper function for turning one-element dictionaries into their
         single value. '''
     if len(items) == 1:
         return items[0]
     raise RuntimeError('Not exactly one element')
+
+def as_scalar(constructor: BaseConstructor, node: YAMLNode) -> Any:
+    ''' Helper function to turn YAML scalars into Python objects. '''
+    if node.tag == 'tag:yaml.org,2002:null':
+        return None
+    return constructor.construct_scalar(node)
 
 @contextlib.contextmanager
 def unfreeze(obj):

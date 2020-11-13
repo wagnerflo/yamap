@@ -22,7 +22,7 @@ import typing
 
 import ruamel.yaml.loader
 import ruamel.yaml.nodes
-import yamap.schema                      # pylint: disable=unused-import
+import yamap.schema
 
 @dataclasses.dataclass
 class stackitem:
@@ -31,7 +31,7 @@ class stackitem:
 
     node: ruamel.yaml.nodes.Node
     schema: yamap.schema.yatype
-    parent: typing.Optional[stackitem]
+    parent: typing.Optional[stackitem]  # pylint: disable=unsubscriptable-object
     children: typing.List[typing.Any] = dataclasses.field(default_factory=list)
     branch_visited: bool = dataclasses.field(default=False, init=False)
 
@@ -83,8 +83,8 @@ def load_and_map(stream: typing.Any, schema: 'yamap.schema.yamatchable') -> typi
             # and it is a branching node
             if children is not None:
                 # push stackitems of its children
-                for node,schema in children:
-                    stack.append(stackitem(node, schema, top))
+                for child_node,child_schema in children:
+                    stack.append(stackitem(child_node, child_schema, top))
 
                 # mark node as visited
                 top.branch_visited = True
