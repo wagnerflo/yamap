@@ -224,7 +224,22 @@ class yascalar(yaleafnode):
     tag_regex: RegexPattern = re_compile(
         r'tag:yaml\.org,2002:(str|int|float|null|bool)'
     )
+    value: initvar[str] = None
     construct: ConstructCallable = as_scalar
+    value_regex: Optional[RegexPattern] = field(init=False, default=None)
+
+    def __post_init__(self, tag: str, value: str): # type: ignore # pylint: disable=W0221
+        super().__init__(tag)
+        if value:
+            with unfreeze(self) as unfrozen:
+                unfrozen.value_regex = re_compile(value)
+
+    def matches(self, node: YAMLNode) -> yatype:
+        super().matches(node)
+        if not self.value_regex or self.value_regex.fullmatch(node.value):
+            return self
+
+        raise NoMatchingType(node)
 
     def construct_leaf(self, constructor: SafeConstructor,
                              node: YAMLNode) -> Any:

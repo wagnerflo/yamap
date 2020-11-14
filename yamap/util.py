@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-import re
 import types
 
 from collections.abc import Iterable,Sequence
