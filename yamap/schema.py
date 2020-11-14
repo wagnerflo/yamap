@@ -51,7 +51,6 @@ from .errors import MappingError,NoMatchingType
 from .util import (
     zip_first,
     mkobj,
-    re_tuple,
     pair,
     squasheddict,
     as_scalar,
@@ -61,7 +60,6 @@ from .util import (
 # type aliases
 PairlikeCallable = Callable[[Any, Any], Any]
 ConstructCallable = Callable[[SafeConstructor,YAMLNode], Any]
-RegexTuple = Tuple[RegexPattern, ...]
 MatchedChildren = Iterable[Tuple[YAMLNode, 'yatype']] # pylint: disable=E1136
 EntryMatchResult = Optional[Tuple[str, 'yatype', PairlikeCallable]] # pylint: disable=E1136
 Copyable = TypeVar('Copyable', bound='yacopyable')
@@ -179,23 +177,21 @@ class yaexpand(yatype):
 class yanode_data:
     ''' Helper class to make mypy happy with the abstract class yanode. '''
     tag: initvar[str] = None
-    tags: initvar[Tuple[str, ...]] = ()
     type: Optional[Callable[..., Any]] = None # pylint: disable=E1136
-    re_tags: RegexTuple = field(init=False, default=())
+    tag_regex: RegexPattern = field(init=False)
 
 class yanode(yanode_data,yatype):
     ''' Abstract class that represents one node of the YAML parse tree.
         Implements a generic matching algorith using the nodes YAML tag. '''
 
-    def __post_init__(self, tag: str, tags: Tuple[str, ...]) -> None:
-        if tag or tags:
+    def __post_init__(self, tag: str) -> None:
+        if tag:
             with unfreeze(self) as unfrozen:
-                unfrozen.re_tags = re_tuple(*filter(None, tags + (tag,)))
+                unfrozen.tag_regex = re_compile(tag)
 
     def matches(self, node: YAMLNode) -> yatype:
-        for tag in self.re_tags:
-            if tag.fullmatch(node.tag):
-                return self
+        if self.tag_regex.fullmatch(node.tag):
+            return self
 
         raise NoMatchingType(node)
 
@@ -225,12 +221,8 @@ class yascalar(yaleafnode):
     ''' Helper class representing all kinds of YAML scalar nodes. Can be
         used as a catch-all. '''
 
-    re_tags: RegexTuple = re_tuple(
-        'tag:yaml.org,2002:str',
-        'tag:yaml.org,2002:int',
-        'tag:yaml.org,2002:float',
-        'tag:yaml.org,2002:null',
-        'tag:yaml.org,2002:bool',
+    tag_regex: RegexPattern = re_compile(
+        r'tag:yaml\.org,2002:(str|int|float|null|bool)'
     )
     construct: ConstructCallable = as_scalar
 
@@ -241,33 +233,34 @@ class yascalar(yaleafnode):
 @dataclass(frozen=True)
 class yastr(yascalar):
     ''' More specific scalar type to only match string. '''
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:str')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:str')
 
 @dataclass(frozen=True)
 class yanull(yascalar):
     ''' More specific scalar type to only match the YAML null value. '''
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:null')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:null')
 
 @dataclass(frozen=True)
 class yabool(yascalar):
     ''' More specific scalar type to only match the YAML booleans. '''
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:bool')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:bool')
 
 @dataclass(frozen=True)
 class yanumber(yascalar):
     ''' More specific scalar type to only match the YAML numbers. '''
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:int',
-                                   'tag:yaml.org,2002:float')
+    tag_regex: RegexPattern = re_compile(
+        r'tag:yaml\.org,2002:(int|float)'
+    )
 
 @dataclass(frozen=True)
 class yaint(yanumber):
     ''' More specific scalar type to only match the YAML ints. '''
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:int')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:int')
 
 @dataclass(frozen=True)
 class yafloat(yanumber):
     ''' More specific scalar type to only match the YAML floats. '''
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:float')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:float')
 
 
 @dataclass(frozen=True)
@@ -311,13 +304,13 @@ class yaentry(yacopyable):
 class yamap(yabranchnode):
     ''' Represents a YAML mapping node. '''
 
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:map')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:map')
     type: Optional[Callable[[list], Any]] = None
     squash: bool = False
     entries: Tuple[yaentry, ...] = field(init=False, default=())
 
-    def __post_init__(self, tag: str, tags: Tuple[str, ...]) -> None:
-        super().__post_init__(tag, tags)
+    def __post_init__(self, tag: str) -> None:
+        super().__post_init__(tag)
         with unfreeze(self) as unfrozen:
             if unfrozen.type is None:
                 unfrozen.type = squasheddict if unfrozen.squash else dict
@@ -398,7 +391,7 @@ class yamap(yabranchnode):
 class yaseq(yabranchnode):
     ''' Represents a YAML sequence node. '''
 
-    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:seq')
+    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:seq')
     schema: yaoneof = field(init=False, default_factory=yaoneof)
 
     def match_children(self, node: YAMLNode) -> MatchedChildren:

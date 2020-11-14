@@ -65,10 +65,6 @@ def mkobj(cls_or_instance):
         return cls_or_instance()
     return cls_or_instance
 
-def re_tuple(*args: Iterable[str]) -> Tuple[re.Pattern, ...]: # pylint: disable=E1136
-    ''' Compile all arguments as regex patterns and return as tuple. '''
-    return tuple(map(re.compile, args))
-
 def pair(a: A, b: B) -> Tuple[A, B]:
     ''' Helper function for creating new two-element tuples. '''
     return (a, b)
