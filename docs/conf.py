@@ -30,6 +30,7 @@ author = 'Florian Wagner'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
 ]
 
@@ -76,3 +77,9 @@ html_css_files = ['custom.css']
 
 # If true, links to the reST sources are added to the pages.
 html_show_sourcelink = False
+
+
+# -- Link to other projects' documentation -----------------------------------
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+}
