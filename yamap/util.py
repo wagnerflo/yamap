@@ -33,7 +33,7 @@ from typing import (
 )
 
 from ruamel.yaml.nodes import Node as YAMLNode
-from ruamel.yaml.constructor import BaseConstructor
+from ruamel.yaml.constructor import SafeConstructor
 
 Object = TypeVar('Object', bound=object)
 A = TypeVar('A')
@@ -80,10 +80,16 @@ def squasheddict(items: Sequence[A]) -> A: # pylint: disable=E1136
         return items[0]
     raise RuntimeError('Not exactly one element')
 
-def as_scalar(constructor: BaseConstructor, node: YAMLNode) -> Any:
+def as_scalar(constructor: SafeConstructor, node: YAMLNode) -> Any:
     ''' Helper function to turn YAML scalars into Python objects. '''
     if node.tag == 'tag:yaml.org,2002:null':
         return None
+    if node.tag == 'tag:yaml.org,2002:bool':
+        return constructor.construct_yaml_bool(node)
+    if node.tag == 'tag:yaml.org,2002:float':
+        return constructor.construct_yaml_float(node)
+    if node.tag == 'tag:yaml.org,2002:int':
+        return constructor.construct_yaml_int(node)
     return constructor.construct_scalar(node)
 
 @contextlib.contextmanager

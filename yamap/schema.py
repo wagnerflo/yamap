@@ -44,7 +44,7 @@ from typing import (
 )
 
 from ruamel.yaml.nodes import Node as YAMLNode
-from ruamel.yaml.constructor import BaseConstructor
+from ruamel.yaml.constructor import SafeConstructor
 
 from .mapper import load_and_map
 from .errors import MappingError,NoMatchingType
@@ -60,7 +60,7 @@ from .util import (
 
 # type aliases
 PairlikeCallable = Callable[[Any, Any], Any]
-ConstructCallable = Callable[[BaseConstructor,YAMLNode], Any]
+ConstructCallable = Callable[[SafeConstructor,YAMLNode], Any]
 RegexTuple = Tuple[RegexPattern, ...]
 MatchedChildren = Iterable[Tuple[YAMLNode, 'yatype']] # pylint: disable=E1136
 EntryMatchResult = Optional[Tuple[str, 'yatype', PairlikeCallable]] # pylint: disable=E1136
@@ -104,7 +104,7 @@ class yatype(yamatchable):
         YAML file. '''
 
     @abstractmethod
-    def construct_leaf(self, constructor: BaseConstructor,
+    def construct_leaf(self, constructor: SafeConstructor,
                              node: YAMLNode) -> Any:
         ''' Turns the YAML node into a Python object. Only needs to be
             implemented for leaf nodes (usually scalars or tags that are
@@ -170,7 +170,7 @@ class yaexpand(yatype):
     def resolve(self, value: List[Any]) -> Any:
         return self.type(self.key, value[0])
 
-    def construct_leaf(self, constructor: BaseConstructor,
+    def construct_leaf(self, constructor: SafeConstructor,
                              node: YAMLNode) -> Any:
         raise NotImplementedError()
 
@@ -211,7 +211,7 @@ class yaleafnode(yanode):
 class yabranchnode(yanode):
     ''' Helper for representing branch nodes. Implements construct_leaf
         by raising an Exception. '''
-    def construct_leaf(self, constructor: BaseConstructor,
+    def construct_leaf(self, constructor: SafeConstructor,
                              node: YAMLNode) -> Any:
         raise TypeError(
             'Branch node cannot be constructed as leaf. This is most ' +
@@ -228,11 +228,13 @@ class yascalar(yaleafnode):
     re_tags: RegexTuple = re_tuple(
         'tag:yaml.org,2002:str',
         'tag:yaml.org,2002:int',
+        'tag:yaml.org,2002:float',
         'tag:yaml.org,2002:null',
+        'tag:yaml.org,2002:bool',
     )
     construct: ConstructCallable = as_scalar
 
-    def construct_leaf(self, constructor: BaseConstructor,
+    def construct_leaf(self, constructor: SafeConstructor,
                              node: YAMLNode) -> Any:
         return self.construct(constructor, node) # type: ignore
 
@@ -245,6 +247,27 @@ class yastr(yascalar):
 class yanull(yascalar):
     ''' More specific scalar type to only match the YAML null value. '''
     re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:null')
+
+@dataclass(frozen=True)
+class yabool(yascalar):
+    ''' More specific scalar type to only match the YAML booleans. '''
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:bool')
+
+@dataclass(frozen=True)
+class yanumber(yascalar):
+    ''' More specific scalar type to only match the YAML numbers. '''
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:int',
+                                   'tag:yaml.org,2002:float')
+
+@dataclass(frozen=True)
+class yaint(yanumber):
+    ''' More specific scalar type to only match the YAML ints. '''
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:int')
+
+@dataclass(frozen=True)
+class yafloat(yanumber):
+    ''' More specific scalar type to only match the YAML floats. '''
+    re_tags: RegexTuple = re_tuple('tag:yaml.org,2002:float')
 
 
 @dataclass(frozen=True)
@@ -392,6 +415,10 @@ __all__ = (
     'yascalar',
     'yastr',
     'yanull',
+    'yabool',
+    'yanumber',
+    'yaint',
+    'yafloat',
     'yaentry',
     'yamap',
     'yaseq',
