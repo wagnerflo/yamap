@@ -19,6 +19,9 @@ from __future__ import annotations
 class yaerror(Exception):
     ''' Base class for all yamap exceptions to derive from. '''
 
+class SchemaError(yaerror):
+    ''' Exception for denoting schema inconsistencies. '''
+
 class MappingError(yaerror):
     ''' Exception for any kind or error the occurs while mapping YAML to
         Python objects using a yamap schema. '''

@@ -18,13 +18,13 @@ from __future__ import annotations
 
 from abc import ABC,abstractmethod
 from collections import defaultdict
-from collections.abc import Iterable,Iterator
+from collections.abc import Iterable,Iterator,Sequence
 from copy import copy as mkcopy
 from dataclasses import (
     dataclass,
     field,
     fields as get_dataclass_fields,
-    InitVar as initvar,
+    MISSING, _MISSING_TYPE,
 )
 from contextlib import suppress
 from re import (
@@ -47,23 +47,27 @@ from ruamel.yaml.nodes import Node as YAMLNode
 from ruamel.yaml.constructor import SafeConstructor
 
 from .mapper import load_and_map
-from .errors import MappingError,NoMatchingType
+from .errors import MappingError,NoMatchingType,SchemaError
 from .util import (
     zip_first,
     mkobj,
     pair,
-    squasheddict,
+    squashed,
+    unpacked_map,
+    unpacked_seq,
     as_scalar,
     unfreeze,
 )
 
 # type aliases
+T = TypeVar('T')
 PairlikeCallable = Callable[[Any, Any], Any]
 ConstructCallable = Callable[[SafeConstructor,YAMLNode], Any]
 MatchedChildren = Iterable[Tuple[YAMLNode, 'yatype']] # pylint: disable=E1136
 EntryMatchResult = Optional[Tuple[str, 'yatype', PairlikeCallable]] # pylint: disable=E1136
 Copyable = TypeVar('Copyable', bound='yacopyable')
 MatchArgument = Union['yatype', Type['yatype']] # pylint: disable=E1136
+OptField = Union[_MISSING_TYPE, T] # pylint: disable=E1136
 
 
 class yacopyable:
@@ -173,24 +177,32 @@ class yaexpand(yatype):
         raise NotImplementedError()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=True)
 class yanode_data:
     ''' Helper class to make mypy happy with the abstract class yanode. '''
-    tag: initvar[str] = None
-    type: Optional[Callable[..., Any]] = None # pylint: disable=E1136
-    tag_regex: RegexPattern = field(init=False)
+    tag: RegexPattern
+    type: Optional[Callable] = None # pylint: disable=E1136
 
 class yanode(yanode_data,yatype):
     ''' Abstract class that represents one node of the YAML parse tree.
         Implements a generic matching algorith using the nodes YAML tag. '''
 
-    def __post_init__(self, tag: str) -> None:
-        if tag:
-            with unfreeze(self) as unfrozen:
-                unfrozen.tag_regex = re_compile(tag)
+    def __init__(self, tag: OptField[str] = MISSING,
+                       type: OptField[Callable] = MISSING) -> None:
+        with unfreeze(self) as unfrozen:
+            if tag is not MISSING:
+                unfrozen.tag = re_compile(tag)
+            if type is not MISSING:
+                unfrozen.type = type
+
+        if not hasattr(self, 'tag'):
+            raise SchemaError(
+                'Field \'tag\' neither defined as class attribute nor ' +
+                'constructor argument'
+            )
 
     def matches(self, node: YAMLNode) -> yatype:
-        if self.tag_regex.fullmatch(node.tag):
+        if self.tag.fullmatch(node.tag):
             return self
 
         raise NoMatchingType(node)
@@ -216,27 +228,31 @@ class yabranchnode(yanode):
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yascalar(yaleafnode):
     ''' Helper class representing all kinds of YAML scalar nodes. Can be
         used as a catch-all. '''
 
-    tag_regex: RegexPattern = re_compile(
+    tag: RegexPattern = re_compile(
         r'tag:yaml\.org,2002:(str|int|float|null|bool)'
     )
-    value: initvar[str] = None
-    construct: ConstructCallable = as_scalar
-    value_regex: Optional[RegexPattern] = field(init=False, default=None)
+    value: Optional[RegexPattern] = None
+    construct: ConstructCallable = staticmethod(as_scalar) # type: ignore
 
-    def __post_init__(self, tag: str, value: str): # type: ignore # pylint: disable=W0221
-        super().__init__(tag)
-        if value:
-            with unfreeze(self) as unfrozen:
-                unfrozen.value_regex = re_compile(value)
+    def __init__(self, tag: OptField[str] = MISSING,
+                       type: OptField[Callable] = MISSING,
+                       value: OptField[str] = MISSING,
+                       construct: OptField[ConstructCallable] = MISSING) -> None:
+        super().__init__(tag, type)
+        with unfreeze(self) as unfrozen:
+            if value is not MISSING:
+                unfrozen.value = re_compile(value)
+            if construct is not MISSING:
+                unfrozen.construct = construct
 
     def matches(self, node: YAMLNode) -> yatype:
         super().matches(node)
-        if not self.value_regex or self.value_regex.fullmatch(node.value):
+        if not self.value or self.value.fullmatch(node.value):
             return self
 
         raise NoMatchingType(node)
@@ -245,37 +261,35 @@ class yascalar(yaleafnode):
                              node: YAMLNode) -> Any:
         return self.construct(constructor, node) # type: ignore
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yastr(yascalar):
     ''' More specific scalar type to only match string. '''
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:str')
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:str')
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yanull(yascalar):
     ''' More specific scalar type to only match the YAML null value. '''
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:null')
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:null')
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yabool(yascalar):
     ''' More specific scalar type to only match the YAML booleans. '''
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:bool')
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:bool')
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yanumber(yascalar):
     ''' More specific scalar type to only match the YAML numbers. '''
-    tag_regex: RegexPattern = re_compile(
-        r'tag:yaml\.org,2002:(int|float)'
-    )
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:(int|float)')
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yaint(yanumber):
     ''' More specific scalar type to only match the YAML ints. '''
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:int')
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:int')
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yafloat(yanumber):
     ''' More specific scalar type to only match the YAML floats. '''
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:float')
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:float')
 
 
 @dataclass(frozen=True)
@@ -315,20 +329,23 @@ class yaentry(yacopyable):
             yamap.match_children. '''
         return '({})'.format(' | '.join(r.pattern for r,s,t in self.keys))
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yamap(yabranchnode):
     ''' Represents a YAML mapping node. '''
 
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:map')
-    type: Optional[Callable[[list], Any]] = None
-    squash: bool = False
-    entries: Tuple[yaentry, ...] = field(init=False, default=())
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:map')
+    type: Callable[[Sequence[Tuple[Any, Any]]], Any] = dict
+    entries: Tuple[yaentry, ...] = ()
 
-    def __post_init__(self, tag: str) -> None:
-        super().__post_init__(tag)
-        with unfreeze(self) as unfrozen:
-            if unfrozen.type is None:
-                unfrozen.type = squasheddict if unfrozen.squash else dict
+    def __init__(self, tag: OptField[str] = MISSING,
+                       type: Callable = dict,
+                       squash: bool = False,
+                       unpack: bool = False) -> None:
+        if squash:
+            type = squashed(type)
+        elif unpack:
+            type = unpacked_map(type)
+        super().__init__(tag, type)
 
     def match_children(self, node: YAMLNode) -> MatchedChildren:
         counts: Dict[yaentry, int] = defaultdict(lambda: 0)
@@ -402,12 +419,20 @@ class yamap(yabranchnode):
         return self.case(regex, schema, type, repeat=True, required=True)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class yaseq(yabranchnode):
     ''' Represents a YAML sequence node. '''
 
-    tag_regex: RegexPattern = re_compile(r'tag:yaml\.org,2002:seq')
-    schema: yaoneof = field(init=False, default_factory=yaoneof)
+    tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:seq')
+    type: Callable[[Sequence[Any]], Any] = list
+    schema: yaoneof = yaoneof()
+
+    def __init__(self, tag: OptField[str] = MISSING,
+                       type: Callable = list,
+                       unpack: bool = False) -> None:
+        if unpack:
+            type = unpacked_seq(type)
+        super().__init__(tag, type)
 
     def match_children(self, node: YAMLNode) -> MatchedChildren:
         for item in reversed(node.value):

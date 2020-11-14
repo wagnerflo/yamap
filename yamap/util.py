@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import inspect
 import types
 
@@ -37,6 +38,7 @@ from ruamel.yaml.constructor import SafeConstructor
 Object = TypeVar('Object', bound=object)
 A = TypeVar('A')
 B = TypeVar('B')
+C = TypeVar('C')
 
 def zip_first(pred: Callable[[Any], Any], iterable: Iterable) -> Tuple[Any, Any]:
     ''' Evaluate pred(item) for each item in iterable until this call's
@@ -68,12 +70,31 @@ def pair(a: A, b: B) -> Tuple[A, B]:
     ''' Helper function for creating new two-element tuples. '''
     return (a, b)
 
-def squasheddict(items: Sequence[A]) -> A: # pylint: disable=E1136
-    ''' Helper function for turning one-element dictionaries into their
-        single value. '''
-    if len(items) == 1:
-        return items[0]
-    raise RuntimeError('Not exactly one element')
+def squashed(callable: Callable[[A, B], C]) -> Callable[[Sequence[Tuple[A, B]]], C]:
+    ''' Helper function wrapper for turning one-element dictionaries
+        into their single value and unpacking it. '''
+    @functools.wraps(callable)
+    def squash(items: Sequence[Tuple[A, B]]) -> C:
+        if len(items) == 1:
+            return callable(*items[0])
+        raise RuntimeError('Not exactly one element')
+    return squash
+
+def unpacked_map(callable: Callable[..., C]) -> Callable[[Sequence[Tuple[str, A]]], C]:
+    ''' Helper function wrapper for unpacking a squence of two element
+        tuples as keyword arguments of the wrapped function. '''
+    @functools.wraps(callable)
+    def unpack(items: Sequence[Tuple[str, A]]) -> C:
+        return callable(**dict(items))
+    return unpack
+
+def unpacked_seq(callable: Callable[..., C]) -> Callable[[Sequence[A]], C]:
+    ''' Helper function wrapper for unpacking a squence as postitional
+        arguments of the wrapped function. '''
+    @functools.wraps(callable)
+    def unpack(items: Sequence[A]) -> C:
+        return callable(*items)
+    return unpack
 
 def as_scalar(constructor: SafeConstructor, node: YAMLNode) -> Any:
     ''' Helper function to turn YAML scalars into Python objects. '''
