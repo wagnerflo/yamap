@@ -190,7 +190,7 @@ class yanode(yanode_data,yatype):
         Implements a generic matching algorith using the nodes YAML tag. '''
 
     def __init__(self, tag: OptField[str] = MISSING,
-                       type: OptField[Callable] = MISSING) -> None:
+                       type: OptField[Optional[Callable]] = MISSING) -> None:
         with unfreeze(self) as unfrozen:
             if tag is not MISSING:
                 unfrozen.tag = re_compile(tag)
@@ -336,17 +336,25 @@ class yamap(yabranchnode):
     ''' Represents a YAML mapping node. '''
 
     tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:map')
-    type: Callable[[Sequence[Tuple[Any, Any]]], Any] = dict
+    type: Optional[Callable[[Sequence[Tuple[Any, Any]]], Any]] = dict
     entries: Tuple[yaentry, ...] = ()
 
     def __init__(self, tag: OptField[str] = MISSING,
-                       type: Callable = dict,
+                       type: OptField[Optional[Callable]] = MISSING,
                        squash: bool = False,
                        unpack: bool = False) -> None:
-        if squash:
-            type = squashed(type)
-        elif unpack:
-            type = unpacked_map(type)
+        if isinstance(type, _MISSING_TYPE):
+            type = self.type
+        if squash and unpack:
+            raise SchemaError('squash and unpack cannot be used at the same time')
+        if type is None:
+            if squash or unpack:
+                raise SchemaError('squash and unpack require a type')
+        else:
+            if squash:
+                type = squashed(type)
+            elif unpack:
+                type = unpacked_map(type)
         super().__init__(tag, type)
 
     def match_children(self, node: YAMLNode) -> MatchedChildren:
@@ -426,14 +434,20 @@ class yaseq(yabranchnode):
     ''' Represents a YAML sequence node. '''
 
     tag: RegexPattern = re_compile(r'tag:yaml\.org,2002:seq')
-    type: Callable[[Sequence[Any]], Any] = list
+    type: Optional[Callable[[Sequence[Any]], Any]] = list
     schema: yaoneof = yaoneof()
 
     def __init__(self, tag: OptField[str] = MISSING,
-                       type: Callable = list,
+                       type: OptField[Optional[Callable]] = MISSING,
                        unpack: bool = False) -> None:
-        if unpack:
-            type = unpacked_seq(type)
+        if isinstance(type, _MISSING_TYPE):
+            type = self.type
+        if type is None:
+            if unpack:
+                raise SchemaError('unpack requires a type')
+        else:
+            if unpack:
+                type = unpacked_seq(type)
         super().__init__(tag, type)
 
     def match_children(self, node: YAMLNode) -> MatchedChildren:
