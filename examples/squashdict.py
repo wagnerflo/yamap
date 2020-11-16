@@ -19,7 +19,7 @@ class entry:
 schema = (
   yaseq()
     .case(
-      yamap(type=entry, squash=True)
+      yamap(type=entry, squash=True, unpack=True)
         .exactly_one('item\d', yamap().zero_or_more('.+', yastr))
     )
 )

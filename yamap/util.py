@@ -39,7 +39,6 @@ from ruamel.yaml.constructor import SafeConstructor
 Object = TypeVar('Object', bound=object)
 A = TypeVar('A')
 B = TypeVar('B')
-C = TypeVar('C')
 
 def zip_first(pred: Callable[[Any], Any], iterable: Iterable) -> Tuple[Any, Any]:
     ''' Evaluate pred(item) for each item in iterable until this call's
@@ -71,29 +70,33 @@ def pair(a: A, b: B) -> Tuple[A, B]:
     ''' Helper function for creating new two-element tuples. '''
     return (a, b)
 
-def squashed(callable: Callable[[A, B], C]) -> Callable[[Sequence[Tuple[A, B]]], C]:
+def identity(a: A) -> A:
+    ''' Helper implementing the identity function. '''
+    return a
+
+def squashed(callable: Callable[[A], B]) -> Callable[[Sequence[A]], B]:
     ''' Helper function wrapper for turning one-element dictionaries
         into their single value and unpacking it. '''
     @functools.wraps(callable)
-    def squash(items: Sequence[Tuple[A, B]]) -> C:
+    def squash(items: Sequence[A]) -> B:
         if len(items) == 1:
-            return callable(*items[0])
+            return callable(items[0])
         raise RuntimeError('Not exactly one element')
     return squash
 
-def unpacked_map(callable: Callable[..., C]) -> Callable[[Sequence[Tuple[str, A]]], C]:
+def unpacked_map(callable: Callable[..., B]) -> Callable[[Sequence[Tuple[str, A]]], B]:
     ''' Helper function wrapper for unpacking a squence of two element
         tuples as keyword arguments of the wrapped function. '''
     @functools.wraps(callable)
-    def unpack(items: Sequence[Tuple[str, A]]) -> C:
+    def unpack(items: Sequence[Tuple[str, A]]) -> B:
         return callable(**dict(items))
     return unpack
 
-def unpacked_seq(callable: Callable[..., C]) -> Callable[[Sequence[A]], C]:
+def unpacked_seq(callable: Callable[..., B]) -> Callable[[Sequence[A]], B]:
     ''' Helper function wrapper for unpacking a squence as postitional
         arguments of the wrapped function. '''
     @functools.wraps(callable)
-    def unpack(items: Sequence[A]) -> C:
+    def unpack(items: Sequence[A]) -> B:
         return callable(*items)
     return unpack
 
