@@ -22,10 +22,11 @@ import functools
 import inspect
 import types
 
-from collections.abc import Iterable,Sequence
 from typing import (
     Any,
     Callable,
+    Iterable,
+    Sequence,
     Tuple,
     Type,
     TypeVar,

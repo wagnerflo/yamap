@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from abc import ABC,abstractmethod
 from collections import defaultdict
-from collections.abc import Iterable,Iterator,Sequence
 from copy import copy as mkcopy
 from dataclasses import (
     dataclass,
@@ -35,8 +34,11 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterable,
+    Iterator,
     List,
     Optional,
+    Sequence,
     Tuple,
     Type,
     TypeVar,
