@@ -1,4 +1,7 @@
 .pyenv/
 __pycache__/
 *.pyc
+build/
+dist/
 docs/_build/
+yamap.egg-info/
