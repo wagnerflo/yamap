@@ -110,14 +110,21 @@ corresponding simple Python objects:
   types and constructs accordingly.
 
 In addition to matching by tag, you can pass
-:class:`~yamap.schema.yascalar` (and thus all other scalar
-types as these derive from it) a regex on construction. **yamap** will
-try to :func:`~re.fullmatch` this against the node value
-(being the unconstructed :obj:`str` from the YAML data) and throw a
+:class:`yascalar <yamap.schema.yascalar.__init__>` (and thus all other
+scalar types as these derive from it) a regex on construction. **yamap**
+will try to :func:`~re.fullmatch` this against the node value (being the
+unconstructed :obj:`str` from the YAML data) and throw a
 :exc:`~yamap.errors.MappingError` if this doesn’t succeed.
 
-Sequence data types
--------------------
+Sequence type
+-------------
+The schema type :class:`~yamap.schema.yaseq` matches
+*tag:yaml.org,2002:seq* will construct it's children and return them
+as a Python :obj:`list`.
+
+As such you'll need to specify what types are allowed as members of the
+list using :func:`~yamap.schema.yaseq.case`
+
 These are the branches of the YAML schema tree. The will be evalauted
 once before and once after their children. First to construct a mapping
 of children to schema types and second to actuall turn them into
@@ -141,11 +148,79 @@ more complex schema hierarchies:
 Type conversion
 ===============
 All none-virtual schema types support passing a callable as the
-constructor argument :class:`type <yamap.schema.yanode>`.
-
+constructor argument :class:`type <yamap.schema.yanode>`. That callable
+will be passed the constructed value as its single argument. For
+:class:`~yamap.schema.yaseq` types that is a list of elements and for
+:class:`~yamap.schema.yamap` a list of key,value tuples. It is
+unrestricted in its return type.
 
 Unpacking
 ---------
+Sometimes you'd rather have your **type** be called with unpacked
+arguments or keyword arguments instead of a single list. That's what
+happens when you set *unpack=True* when creating a
+:class:`yaseq <yamap.schema.yaseq.__init__>` or
+:class:`yamap <yamap.schema.yamap.__init__>` respectivly.
+
+.. code-block:: python
+
+   def hello(what='world', who='friend'):
+       return 'Hello {what}, my {who}!'.format(what=what, who=who)
+
+   schema = (
+     yamap(type=hello, unpack=True)
+       .zero_or_one('what', yastr)
+       .zero_or_one('who',  yastr)
+   )
+
+   assert schema.load('{ who: "mate" }') == 'Hello world, my mate!'
+
 
 Map squashing
 -------------
+Setting **squash=True** when creating a :class:`~yamap.schema.yamap`
+will make the type converter be called with only the first key,value
+pair of your mapping.
+
+For example instead of having to write
+
+.. code-block:: yaml
+
+   - name: upper
+   - name: replace
+     args: [FRIEND, MATE]
+   - name: replace
+     args: [HELLO, HEY]
+
+you can implement a schema to parse the much more readable
+
+.. code-block:: yaml
+
+   - upper
+   - replace: [FRIEND, MATE]
+   - replace: [HELLO, HEY]
+
+like this
+
+.. code-block:: python
+
+   from yamap import *
+   from dataclasses import dataclass
+
+   def pipeline(items):
+       input = 'Hello world, my friend!'
+       for item in items:
+           input = getattr(input, item.name)(*item.args)
+       return input
+
+   @dataclass
+   class entry:
+       name: str
+       args: tuple = ()
+
+   schema = (
+     yaseq(type=pipeline)
+       .case(yastr(type=entry))
+       .case(yamap(type=entry, squash=True, unpack=True)
+               .exactly_one('.+', yaseq().case(yascalar)))
+   )

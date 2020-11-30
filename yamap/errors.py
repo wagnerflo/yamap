@@ -23,8 +23,8 @@ class SchemaError(yaerror):
     ''' Exception for denoting schema inconsistencies. '''
 
 class MappingError(yaerror):
-    ''' Exception for any kind or error the occurs while mapping YAML to
-        Python objects using a yamap schema. '''
+    ''' Exception for any kind or error that occurs while mapping YAML
+        to Python objects using a yamap schema. '''
 
     def __init__(self, msg, node):
         super().__init__()

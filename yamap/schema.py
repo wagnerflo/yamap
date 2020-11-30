@@ -96,9 +96,9 @@ class yamatchable(ABC,yacopyable):
 
     @abstractmethod
     def matches(self, node: YAMLNode) -> yatype:
-        ''' Will try to match the given YAML node to to a concrete
-            yatype. This needs to be implemented on any and all classes
-            in the hierarchy. '''
+        ''' Will try to match the given YAML node to a concrete yatype.
+            This needs to be implemented on any and all classes in the
+            hierarchy. '''
 
     def load(self, stream: Any) -> Any:
         ''' Helper method that tries matching the given stream to self. '''
@@ -151,7 +151,7 @@ class yaoneof(yamatchable):
 
         raise NoMatchingType(node)
 
-    def case(self, entry: MatchArgument):
+    def case(self, entry: MatchArgument) -> yaoneof:
         ''' Register an additonal schema type option. '''
         return self.copy(entries = self.entries + (mkobj(entry),))
 
@@ -189,7 +189,8 @@ class yanode_data:
 
 class yanode(yanode_data,yatype):
     ''' Abstract class that represents one node of the YAML parse tree.
-        Implements a generic matching algorith using the nodes YAML tag. '''
+        Implements a generic matching algorithm using the nodes YAML
+        tag. '''
 
     def __init__(self, tag: OptField[str] = MISSING,
                        type: Optional[Callable[[Any], Any]] = None) -> None:

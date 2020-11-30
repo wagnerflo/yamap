@@ -27,3 +27,19 @@ div.body > .section {
 div#rtd-sidebar {
     margin-top: 30px;
 }
+
+.py.class {
+    margin-bottom: 30px;
+}
+
+.py.exception {
+    margin-bottom: 30px;
+}
+
+.py.class .field-list.simple {
+    margin-bottom: 17px;
+}
+
+.py.class .py.method {
+    margin-bottom: 17px;
+}
