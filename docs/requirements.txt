@@ -1,2 +1,3 @@
 alabaster==0.7.12
+ruamel.yaml
 Sphinx==3.2.1
